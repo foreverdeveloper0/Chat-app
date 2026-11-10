@@ -748,14 +748,13 @@ class _DiceState extends State<_Dice> with SingleTickerProviderStateMixin {
           final rebound = flying ? 0.0 : math.sin(l * math.pi) * (1 - l) * .22;
           final lift = (flying ? arc : rebound) * 96;
 
-          // Tumble: spins fast at launch and eases into the landing.
-          final spin = (1 - math.pow(1 - a, 2.2)) * 6 * math.pi;
-          final flip = flying ? math.cos(a * 5 * math.pi) : 1.0;
+          // Tumble: spins fast at launch and eases onto the result face.
+          final left = math.pow(1 - a, 1.6).toDouble();
 
           // Squash on impact, then settle.
           final squash =
               flying ? 0.0 : math.sin(l * math.pi * 2.5) * (1 - l) * .2;
-          var scale = 1 + arc * .5;
+          var scale = 1 + arc * .55;
           if (widget.canRoll) scale *= .94 + .14 * widget.pulse.value;
 
           return Stack(
@@ -797,16 +796,16 @@ class _DiceState extends State<_Dice> with SingleTickerProviderStateMixin {
                 alignment: Alignment.center,
                 transform: Matrix4.identity()
                   ..translateByDouble(0, -lift, 0, 1)
-                  ..rotateZ(flying ? spin : 0)
                   ..scaleByDouble(
-                    scale * (1 + squash),
-                    scale * (flying ? (.55 + .45 * flip.abs()) : 1 - squash),
-                    1,
-                    1,
-                  ),
+                      scale * (1 + squash), scale * (1 - squash), 1, 1),
                 child: CustomPaint(
                   size: const Size.square(size),
-                  painter: _DicePainter(widget.game.dice),
+                  painter: _DicePainter(
+                    widget.game.dice,
+                    rx: left * 5 * math.pi,
+                    ry: left * 4 * math.pi,
+                    rz: left * 1.5 * math.pi,
+                  ),
                 ),
               ),
             ],
@@ -818,15 +817,24 @@ class _DiceState extends State<_Dice> with SingleTickerProviderStateMixin {
 }
 
 class _DicePainter extends CustomPainter {
-  const _DicePainter(this.value);
+  const _DicePainter(this.value, {this.rx = 0, this.ry = 0, this.rz = 0});
   final int value;
+  final double rx, ry, rz;
 
   @override
-  void paint(Canvas canvas, Size size) =>
+  void paint(Canvas canvas, Size size) {
+    if (rx == 0 && ry == 0 && rz == 0) {
+      // At rest: the flat face with a little thickness underneath.
       paintDice(canvas, Offset.zero & size, value);
+    } else {
+      paintDice3D(canvas, size.center(Offset(0, -size.height * .05)),
+          size.width * .78, value, rx: rx, ry: ry, rz: rz);
+    }
+  }
 
   @override
-  bool shouldRepaint(_DicePainter old) => old.value != value;
+  bool shouldRepaint(_DicePainter old) =>
+      old.value != value || old.rx != rx || old.ry != ry || old.rz != rz;
 }
 
 // ───────────────────────── Win overlay ─────────────────────────

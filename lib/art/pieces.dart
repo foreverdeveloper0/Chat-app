@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -143,6 +144,115 @@ void paintDice(Canvas canvas, Rect r, int value, {double angle = 0}) {
     );
   }
   canvas.restore();
+}
+
+typedef _M3 = List<List<double>>;
+
+_M3 _rotX(double a) => [
+      [1, 0, 0],
+      [0, math.cos(a), -math.sin(a)],
+      [0, math.sin(a), math.cos(a)],
+    ];
+_M3 _rotY(double a) => [
+      [math.cos(a), 0, math.sin(a)],
+      [0, 1, 0],
+      [-math.sin(a), 0, math.cos(a)],
+    ];
+_M3 _rotZ(double a) => [
+      [math.cos(a), -math.sin(a), 0],
+      [math.sin(a), math.cos(a), 0],
+      [0, 0, 1],
+    ];
+_M3 _mul(_M3 a, _M3 b) => [
+      for (var i = 0; i < 3; i++)
+        [
+          for (var j = 0; j < 3; j++)
+            a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j],
+        ],
+    ];
+List<double> _apply(_M3 m, List<double> v) => [
+      for (var i = 0; i < 3; i++) m[i][0] * v[0] + m[i][1] * v[1] + m[i][2] * v[2],
+    ];
+
+// Cube faces as (value, normal, u, v); opposite faces add up to seven.
+const _cubeFaces = <(int, List<double>, List<double>, List<double>)>[
+  (1, [0, 0, 1], [1, 0, 0], [0, 1, 0]),
+  (6, [0, 0, -1], [-1, 0, 0], [0, 1, 0]),
+  (2, [1, 0, 0], [0, 0, -1], [0, 1, 0]),
+  (5, [-1, 0, 0], [0, 0, 1], [0, 1, 0]),
+  (3, [0, 1, 0], [1, 0, 0], [0, 0, -1]),
+  (4, [0, -1, 0], [1, 0, 0], [0, 0, 1]),
+];
+
+/// Rotation that turns the face showing [value] towards the viewer.
+_M3 _faceForward(int value) => switch (value) {
+      6 => _rotY(math.pi),
+      2 => _rotY(-math.pi / 2),
+      5 => _rotY(math.pi / 2),
+      3 => _rotX(math.pi / 2),
+      4 => _rotX(-math.pi / 2),
+      _ => _rotX(0),
+    };
+
+/// A real 3D dice centred on [centre] with edge [edge]. It is spun by
+/// [rx], [ry], [rz] away from the pose where [value] faces the viewer, so
+/// at zero rotation it shows exactly that face.
+void paintDice3D(
+  Canvas canvas,
+  Offset centre,
+  double edge,
+  int value, {
+  double rx = 0,
+  double ry = 0,
+  double rz = 0,
+}) {
+  final m = _mul(_mul(_rotZ(rz), _mul(_rotX(rx), _rotY(ry))), _faceForward(value));
+  final h = edge / 2;
+  final square = Rect.fromCenter(center: Offset.zero, width: edge, height: edge);
+  final round = RRect.fromRectAndRadius(square, Radius.circular(edge * .17));
+
+  for (final pass in const [0, 1]) {
+    for (final (face, n, u, v) in _cubeFaces) {
+      final rn = _apply(m, n);
+      if (rn[2] <= .001) continue; // facing away
+      final ru = _apply(m, u), rv = _apply(m, v);
+      canvas.save();
+      canvas.translate(centre.dx, centre.dy);
+      canvas.transform(Float64List.fromList([
+        ru[0], ru[1], ru[2], 0, //
+        rv[0], rv[1], rv[2], 0, //
+        rn[0], rn[1], rn[2], 0, //
+        rn[0] * h, rn[1] * h, rn[2] * h, 1,
+      ]));
+      // Lit from the front and slightly from above.
+      final light = (.55 + .45 * rn[2] - .18 * rn[1]).clamp(.0, 1.0);
+      if (pass == 0) {
+        // Square under-layer fills the gaps the rounded corners leave.
+        canvas.drawRect(
+          square.deflate(edge * .05),
+          Paint()
+            ..color = Color.lerp(
+                const Color(0xFF9C8660), const Color(0xFFE2D2B2), light)!,
+        );
+      } else {
+        canvas.drawRRect(
+          round,
+          Paint()
+            ..color = Color.lerp(
+                const Color(0xFFC4AE86), const Color(0xFFFFFDF6), light)!,
+        );
+        final pip = Paint()..color = const Color(0xFF1C1B33);
+        for (final p in _pips[face]!) {
+          canvas.drawCircle(
+            Offset((p.dx - .5) * edge * .98, (p.dy - .5) * edge * .98),
+            edge * .08,
+            pip,
+          );
+        }
+      }
+      canvas.restore();
+    }
+  }
 }
 
 /// Gold coin with an embossed star.

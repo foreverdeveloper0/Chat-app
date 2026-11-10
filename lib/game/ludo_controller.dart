@@ -104,15 +104,12 @@ class LudoController extends ChangeNotifier {
     phase = Phase.rolling;
     message = '';
     onSfx?.call(Sfx.diceRoll);
-    // The dice is in the air for rollTicks * rollTickMs.
-    for (var i = 0; i < rollTicks; i++) {
-      dice = 1 + _rng.nextInt(6);
-      rollTick++;
-      _notify();
-      if (!await _wait(rollTickMs)) return;
-    }
+    // The result is fixed at the throw so the 3D dice can tumble towards it;
+    // it stays in the air for rollTicks * rollTickMs.
     dice = forced ?? 1 + _rng.nextInt(6);
     rollTick++;
+    _notify();
+    if (!await _wait(rollTicks * rollTickMs)) return;
     HapticFeedback.mediumImpact();
     onSfx?.call(Sfx.diceLand);
     // Let the landing bounce finish before anything moves.
