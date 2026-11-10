@@ -55,7 +55,7 @@ void main() {
         rolls++;
       } else if (find.textContaining('pick a piece').evaluate().isNotEmpty) {
         for (var k = 0; k < 16; k++) {
-          final piece = find.byKey(ValueKey(k));
+          final piece = find.byKey(ValueKey('token-$k'));
           if (piece.evaluate().isNotEmpty) {
             await tester.tap(piece, warnIfMissed: false);
           }

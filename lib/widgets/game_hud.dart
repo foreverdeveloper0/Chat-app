@@ -335,7 +335,7 @@ class PlayerAvatar extends StatelessWidget {
             ring(1, color)
           else
             TweenAnimationBuilder<double>(
-              key: ValueKey(timer!.$1),
+              key: ValueKey('timer-${timer!.$1}'),
               tween: Tween(begin: 1, end: 0),
               duration: Duration(seconds: timer!.$2),
               builder: (_, v, _) =>

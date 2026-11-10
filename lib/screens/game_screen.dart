@@ -463,7 +463,7 @@ class _Board extends StatelessWidget {
             ),
           for (final (t, pos, scale) in placed)
             AnimatedPositioned(
-              key: ValueKey(t.player * 4 + t.index),
+              key: ValueKey('token-${t.player * 4 + t.index}'),
               duration: Duration(milliseconds: t.inYard ? 480 : 150),
               curve: t.inYard ? Curves.easeInOutCubic : Curves.easeOut,
               left: rim + pos.dx * cell - bw / 2,
