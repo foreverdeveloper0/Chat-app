@@ -29,6 +29,7 @@ class LudoController extends ChangeNotifier {
     Random? random,
     this.speed = 1,
     this.turnSeconds = 0,
+    this.haptics = true,
     this.onSfx,
     this.onCapture,
   })  : assert(seats.length >= 2),
@@ -54,6 +55,12 @@ class LudoController extends ChangeNotifier {
   /// Seconds a human has to act before losing a life; 0 turns the timer off.
   final int turnSeconds;
   final Random _rng;
+
+  /// Off for the self-playing demo board on the home page.
+  final bool haptics;
+
+  /// While true the match holds still (the demo pauses when hidden).
+  bool paused = false;
 
   /// Called at each audible moment of the match.
   final void Function(Sfx sfx, int variant)? onSfx;
@@ -112,6 +119,9 @@ class LudoController extends ChangeNotifier {
 
   Future<bool> _wait(int ms) async {
     await Future<void>.delayed(Duration(milliseconds: (ms * speed).round()));
+    while (paused && !_disposed) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
     return !_disposed;
   }
 
@@ -218,7 +228,7 @@ class LudoController extends ChangeNotifier {
     rollTick++;
     _notify();
     if (!await _wait(rollTicks * rollTickMs)) return;
-    HapticFeedback.mediumImpact();
+    if (haptics) HapticFeedback.mediumImpact();
     _sfx(Sfx.diceLand);
     // Let the landing bounce finish before anything moves.
     phase = Phase.landed;
@@ -277,7 +287,7 @@ class LudoController extends ChangeNotifier {
     final steps = leaving ? 1 : dice;
     for (var i = 0; i < steps; i++) {
       token.progress++;
-      HapticFeedback.selectionClick();
+      if (haptics) HapticFeedback.selectionClick();
       leaving ? _sfx(Sfx.enter) : _sfx(Sfx.step, i);
       _notify();
       if (!await _wait(170)) return;
@@ -301,7 +311,7 @@ class LudoController extends ChangeNotifier {
     }
     if (token.isHome) _sfx(Sfx.home);
     if (captured) {
-      HapticFeedback.heavyImpact();
+      if (haptics) HapticFeedback.heavyImpact();
       _sfx(Sfx.capture);
       _notify();
       if (!await _wait(520)) return;

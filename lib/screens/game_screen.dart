@@ -215,7 +215,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               builder: (context, _) => LayoutBuilder(
                 builder: (context, box) {
                   final board = math.min(
-                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 322);
+                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 342);
                   return Stack(
                     children: [
                       Column(
@@ -741,9 +741,9 @@ class PlayerPanel extends StatelessWidget {
     required this.onProfile,
   });
 
-  static const width = 106.0;
-  static const height = 78.0;
-  static const _slot = 46.0;
+  static const width = 126.0;
+  static const height = 88.0;
+  static const _slot = 56.0;
 
   final int player;
   final String name;
@@ -769,7 +769,7 @@ class PlayerPanel extends StatelessWidget {
     Widget plate({required Widget child, Gradient? gradient, Color? fill}) =>
         Container(
           width: _slot,
-          height: 15,
+          height: 16,
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 3),
           decoration: BoxDecoration(
@@ -790,7 +790,7 @@ class PlayerPanel extends StatelessWidget {
         children: [
           SizedBox(
             width: _slot,
-            height: 46,
+            height: 54,
             child: Center(
               child: PlayerAvatar(
                 player: player,
@@ -811,7 +811,7 @@ class PlayerPanel extends StatelessWidget {
               shortName(name),
               maxLines: 1,
               style: AppText.title.copyWith(
-                fontSize: 10.5,
+                fontSize: 11.5,
                 color: Colors.white,
                 height: 1.1,
                 shadows: const [Shadow(color: Color(0x88000000), blurRadius: 2)],
@@ -836,7 +836,7 @@ class PlayerPanel extends StatelessWidget {
         children: [
           for (var i = 0; i < LudoController.maxLives; i++)
             Icon(Icons.favorite_rounded,
-                size: 7.8,
+                size: 9.2,
                 color: i < lives
                     ? const Color(0xFFFF4D67)
                     : const Color(0xFF3A3F7A)),
@@ -848,7 +848,7 @@ class PlayerPanel extends StatelessWidget {
       children: [
         SizedBox(
           width: _slot,
-          height: 46,
+          height: 54,
           child: Center(
             child: DiceSocket(
               active: active,
@@ -875,55 +875,19 @@ class PlayerPanel extends StatelessWidget {
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 250),
         opacity: gone ? .55 : 1,
-        child: AnimatedContainer(
+        child: SizedBox(
           key: ValueKey('panel-$player'),
-          duration: const Duration(milliseconds: 250),
           width: width,
           height: height,
-          padding: const EdgeInsets.all(1.8),
-          // The frame itself: brushed steel at rest, gold on the turn.
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(17),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: active
-                  ? const [
-                      Color(0xFFFFF3B8),
-                      Color(0xFFE3B341),
-                      Color(0xFFFFE28A),
-                      Color(0xFF9C6B0E),
-                    ]
-                  : const [
-                      Color(0xFF7C83CC),
-                      Color(0xFF343A80),
-                      Color(0xFF5A61AE),
-                      Color(0xFF23275E),
-                    ],
-            ),
-            boxShadow: [
-              if (active) ...[
-                BoxShadow(color: color.withValues(alpha: .7), blurRadius: 16),
-                const BoxShadow(color: Color(0x66FFC93A), blurRadius: 6),
-              ] else
-                const BoxShadow(
-                    color: Color(0x66060720),
-                    blurRadius: 8,
-                    offset: Offset(0, 4)),
-            ],
-          ),
-          // Only the painted body is clipped to the frame; the dice sits
-          // in an unclipped layer so it can fly up out of the dock.
+          // The dock is a cut-corner badge drawn by [_PanelPainter]; the
+          // content sits in an unclipped layer so the dice can fly out.
           child: Stack(
             clipBehavior: Clip.none,
             children: [
               Positioned.fill(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(15.2),
-                  child: CustomPaint(
-                    painter: _PanelPainter(
-                        color: color, deep: deep, mirrored: mirrored, lit: active),
-                  ),
+                child: CustomPaint(
+                  painter: _PanelPainter(
+                      color: color, deep: deep, mirrored: mirrored, lit: active),
                 ),
               ),
               Positioned.fill(
@@ -954,6 +918,9 @@ class PlayerPanel extends StatelessWidget {
   }
 }
 
+/// Paints a player dock as a cut-corner badge: two opposite corners are
+/// sliced off, a metal frame follows the outline (gold on the player's
+/// turn) and the seat colour sweeps in behind the picture.
 class _PanelPainter extends CustomPainter {
   const _PanelPainter({
     required this.color,
@@ -966,6 +933,24 @@ class _PanelPainter extends CustomPainter {
   final bool mirrored;
   final bool lit;
 
+  /// Outline with the top-inner and bottom-outer corners cut at 45 degrees.
+  static Path outline(Size size, double inset) {
+    final w = size.width - inset, h = size.height - inset;
+    const cut = 20.0, r = 13.0;
+    final l = inset, t = inset;
+    return Path()
+      ..moveTo(l + r, t)
+      ..lineTo(w - cut, t)
+      ..lineTo(w, t + cut)
+      ..lineTo(w, h - r)
+      ..quadraticBezierTo(w, h, w - r, h)
+      ..lineTo(l + cut, h)
+      ..lineTo(l, h - cut)
+      ..lineTo(l, t + r)
+      ..quadraticBezierTo(l, t, l + r, t)
+      ..close();
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
@@ -973,17 +958,29 @@ class _PanelPainter extends CustomPainter {
       canvas.translate(size.width, 0);
       canvas.scale(-1, 1);
     }
+    final w = size.width, h = size.height;
+    final shape = outline(size, 1.4);
+
+    // Glow on the turn, plain drop shadow otherwise.
+    canvas.drawPath(
+      lit ? shape : shape.shift(const Offset(0, 4)),
+      Paint()
+        ..color = lit ? color.withValues(alpha: .85) : const Color(0x88060720)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, lit ? 11 : 6),
+    );
+
+    canvas.save();
+    canvas.clipPath(shape);
     canvas.drawRect(
       rect,
       Paint()
         ..shader = const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF2B3074), Color(0xFF171A47)],
+          colors: [Color(0xFF2F3482), Color(0xFF12143F)],
         ).createShader(rect),
     );
     // Slanted colour band behind the picture.
-    final w = size.width, h = size.height;
     final band = Path()
       ..moveTo(0, 0)
       ..lineTo(w * .58, 0)
@@ -997,12 +994,11 @@ class _PanelPainter extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            color.withValues(alpha: lit ? .62 : .4),
-            deep.withValues(alpha: lit ? .5 : .28),
+            color.withValues(alpha: lit ? .7 : .45),
+            deep.withValues(alpha: lit ? .55 : .3),
           ],
         ).createShader(rect),
     );
-    // Thin highlight along the slant, and a second fainter stripe.
     final edge = Paint()
       ..strokeWidth = 1.6
       ..color = Colors.white.withValues(alpha: lit ? .5 : .22);
@@ -1016,8 +1012,35 @@ class _PanelPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0x22FFFFFF), Color(0x00FFFFFF)],
+          colors: [Color(0x26FFFFFF), Color(0x00FFFFFF)],
         ).createShader(Rect.fromLTWH(0, 0, w, h * .45)),
+    );
+    canvas.restore();
+
+    // Metal frame: brushed steel at rest, gold on the turn.
+    canvas.drawPath(
+      shape,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.4
+        ..strokeJoin = StrokeJoin.round
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: lit
+              ? const [
+                  Color(0xFFFFF3B8),
+                  Color(0xFFE3B341),
+                  Color(0xFFFFE28A),
+                  Color(0xFF9C6B0E),
+                ]
+              : const [
+                  Color(0xFF8E95DC),
+                  Color(0xFF3A4090),
+                  Color(0xFF6A71C0),
+                  Color(0xFF262A66),
+                ],
+        ).createShader(rect),
     );
   }
 

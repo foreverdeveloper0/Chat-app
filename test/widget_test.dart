@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:elite_play_ludo/main.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Future<void> _loadFonts() async {
@@ -33,5 +34,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Coming soon'), findsOneWidget);
     expect(find.text('LUDO'), findsNothing);
+
+    // Tear down so the live demo board's timers end with its controller.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 3));
   });
 }

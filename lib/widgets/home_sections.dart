@@ -2,11 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../art/board.dart';
 import '../art/icons.dart';
 import '../art/pieces.dart';
 import '../theme/app_colors.dart';
 import 'game_card.dart';
+import 'live_board.dart';
 
 typedef Tap = void Function(String label);
 
@@ -276,7 +276,7 @@ class _SideTile extends StatelessWidget {
   }
 }
 
-/// The board is rasterised once; the idle "float" only moves its layer.
+/// The live demo board, drifting gently up and down.
 class _FloatingBoard extends StatefulWidget {
   const _FloatingBoard();
 
@@ -305,9 +305,7 @@ class _FloatingBoardState extends State<_FloatingBoard>
         offset: Offset(0, math.sin(_c.value * 2 * math.pi) * 3.5),
         child: child,
       ),
-      child: const RepaintBoundary(
-        child: CustomPaint(painter: LudoBoardPainter(), size: Size.infinite),
-      ),
+      child: const RepaintBoundary(child: LiveBoard()),
     );
   }
 }

@@ -23,6 +23,7 @@ const playerLight = [
 
 /// Artwork files.
 const boardAsset = 'assets/images/ludo_board.png';
+const gameBgAsset = 'assets/images/game_bg.jpg';
 const pawnAssets = [
   'assets/images/pawn_red.png',
   'assets/images/pawn_green.png',

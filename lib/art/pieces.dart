@@ -198,7 +198,21 @@ void paintDice(Canvas canvas, Rect r, int value, {double angle = 0}) {
         center: Offset(-edge * .1, -edge * .62),
         width: edge * 1.5,
         height: edge * .8),
-    Paint()..color = const Color(0x40FFFFFF),
+    Paint()..color = const Color(0x55FFFFFF),
+  );
+  // Fine gold edge.
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset.zero, width: edge, height: edge), rad),
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = edge * .09
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFFFFF3B8), Color(0xFFE3B341), Color(0xFF9C6B0E)],
+      ).createShader(
+          Rect.fromCenter(center: Offset.zero, width: edge, height: edge)),
   );
   canvas.restore();
 }
