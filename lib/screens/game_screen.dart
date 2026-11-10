@@ -215,7 +215,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               builder: (context, _) => LayoutBuilder(
                 builder: (context, box) {
                   final board = math.min(
-                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 342);
+                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 350);
                   return Stack(
                     children: [
                       Column(
@@ -741,9 +741,9 @@ class PlayerPanel extends StatelessWidget {
     required this.onProfile,
   });
 
-  static const width = 126.0;
-  static const height = 88.0;
-  static const _slot = 56.0;
+  static const width = 138.0;
+  static const height = 92.0;
+  static const _slot = 62.0;
 
   final int player;
   final String name;
@@ -769,7 +769,7 @@ class PlayerPanel extends StatelessWidget {
     Widget plate({required Widget child, Gradient? gradient, Color? fill}) =>
         Container(
           width: _slot,
-          height: 16,
+          height: 17,
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 3),
           decoration: BoxDecoration(
@@ -790,7 +790,7 @@ class PlayerPanel extends StatelessWidget {
         children: [
           SizedBox(
             width: _slot,
-            height: 54,
+            height: 58,
             child: Center(
               child: PlayerAvatar(
                 player: player,
@@ -848,7 +848,7 @@ class PlayerPanel extends StatelessWidget {
       children: [
         SizedBox(
           width: _slot,
-          height: 54,
+          height: 58,
           child: Center(
             child: DiceSocket(
               active: active,
@@ -918,8 +918,8 @@ class PlayerPanel extends StatelessWidget {
   }
 }
 
-/// Paints a player dock as a cut-corner badge: two opposite corners are
-/// sliced off, a metal frame follows the outline (gold on the player's
+/// Paints a player dock as a badge with one corner sliced off (on the dice
+/// side), a metal frame follows the outline (gold on the player's
 /// turn) and the seat colour sweeps in behind the picture.
 class _PanelPainter extends CustomPainter {
   const _PanelPainter({
@@ -933,10 +933,11 @@ class _PanelPainter extends CustomPainter {
   final bool mirrored;
   final bool lit;
 
-  /// Outline with the top-inner and bottom-outer corners cut at 45 degrees.
+  /// Outline with only the top corner on the dice side cut at 45 degrees;
+  /// the name side keeps its rounded corners.
   static Path outline(Size size, double inset) {
     final w = size.width - inset, h = size.height - inset;
-    const cut = 20.0, r = 13.0;
+    const cut = 22.0, r = 14.0;
     final l = inset, t = inset;
     return Path()
       ..moveTo(l + r, t)
@@ -944,8 +945,8 @@ class _PanelPainter extends CustomPainter {
       ..lineTo(w, t + cut)
       ..lineTo(w, h - r)
       ..quadraticBezierTo(w, h, w - r, h)
-      ..lineTo(l + cut, h)
-      ..lineTo(l, h - cut)
+      ..lineTo(l + r, h)
+      ..quadraticBezierTo(l, h, l, h - r)
       ..lineTo(l, t + r)
       ..quadraticBezierTo(l, t, l + r, t)
       ..close();

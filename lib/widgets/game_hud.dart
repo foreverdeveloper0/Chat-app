@@ -675,7 +675,7 @@ class PlayerAvatar extends StatelessWidget {
     required this.isYou,
     required this.rank,
     required this.timer,
-    this.size = 46,
+    this.size = 50,
   });
   final int player;
   final bool isBot;
@@ -786,8 +786,8 @@ class DiceSocket extends StatelessWidget {
   final bool active;
   final Widget? child;
 
-  static const size = 52.0;
-  static const diceSize = 41.0;
+  static const size = 55.0;
+  static const diceSize = 44.0;
 
   @override
   Widget build(BuildContext context) {

@@ -133,18 +133,18 @@ class _LiveBoardState extends State<LiveBoard> {
               top: foot.dy - pw * scale / pawnAspect * .93,
               width: pw * scale,
               height: pw * scale / pawnAspect,
-              child: Image.asset(pawnAssets[t.player],
-                  fit: BoxFit.fill, filterQuality: FilterQuality.medium),
+              child: _HopPawn(player: t.player, progress: t.progress),
             ),
-          // The dice of the match, tinted by whose turn it is.
+          // The match's dice, thrown beside the near corner of the board
+          // and glowing in the colour of whoever is on turn.
           Positioned(
-            left: size.width * .02,
-            top: size.height * .66,
+            left: size.width * .7,
+            top: size.height * .76,
             child: _DemoDice(
               value: _game.dice,
-              rolling: _game.phase == Phase.rolling,
+              phase: _game.phase,
               color: playerColors[_game.current],
-              size: size.width * .19,
+              size: size.width * .16,
             ),
           ),
         ],
@@ -194,53 +194,177 @@ class _BoardBasePainter extends CustomPainter {
   bool shouldRepaint(_BoardBasePainter old) => old.b != b || old.m != m;
 }
 
-class _DemoDice extends StatelessWidget {
+/// A pawn that hops each time it advances a square.
+class _HopPawn extends StatefulWidget {
+  const _HopPawn({required this.player, required this.progress});
+  final int player;
+  final int progress;
+
+  @override
+  State<_HopPawn> createState() => _HopPawnState();
+}
+
+class _HopPawnState extends State<_HopPawn>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _hop = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 165),
+  );
+
+  @override
+  void didUpdateWidget(_HopPawn old) {
+    super.didUpdateWidget(old);
+    if (widget.progress != old.progress && widget.progress >= 0) {
+      _hop.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _hop.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _hop,
+      child: Image.asset(pawnAssets[widget.player],
+          fit: BoxFit.fill, filterQuality: FilterQuality.medium),
+      builder: (context, child) {
+        final h = math.sin(_hop.value * math.pi);
+        return FractionalTranslation(
+          translation: Offset(0, -h * .32),
+          child: Transform.scale(scale: 1 + h * .14, child: child),
+        );
+      },
+    );
+  }
+}
+
+/// The demo's dice: tossed up, tumbling as a real cube, landing with a
+/// bounce on the rolled face, exactly like the dice in a match.
+class _DemoDice extends StatefulWidget {
   const _DemoDice({
     required this.value,
-    required this.rolling,
+    required this.phase,
     required this.color,
     required this.size,
   });
   final int value;
-  final bool rolling;
+  final Phase phase;
   final Color color;
   final double size;
 
   @override
+  State<_DemoDice> createState() => _DemoDiceState();
+}
+
+class _DemoDiceState extends State<_DemoDice>
+    with SingleTickerProviderStateMixin {
+  static const _airMs = LudoController.rollTicks * LudoController.rollTickMs;
+  static const _totalMs = _airMs + LudoController.landMs;
+  static const _air = _airMs / _totalMs;
+
+  late final AnimationController _toss = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: _totalMs),
+    value: 1,
+  );
+
+  @override
+  void didUpdateWidget(_DemoDice old) {
+    super.didUpdateWidget(old);
+    if (widget.phase == Phase.rolling && old.phase != Phase.rolling) {
+      _toss.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _toss.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return AnimatedRotation(
-      turns: rolling ? 1 : 0,
-      duration: Duration(milliseconds: rolling ? 600 : 0),
-      curve: Curves.easeOut,
-      child: AnimatedScale(
-        scale: rolling ? 1.18 : 1,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutBack,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: color.withValues(alpha: .7), blurRadius: 18),
+    final size = widget.size;
+    return AnimatedBuilder(
+      animation: _toss,
+      builder: (_, _) {
+        final t = _toss.value;
+        final flying = t < _air;
+        final a = flying ? t / _air : 1.0;
+        final l = flying ? 0.0 : (t - _air) / (1 - _air);
+        final arc = 4 * a * (1 - a);
+        final rebound = flying ? 0.0 : math.sin(l * math.pi) * (1 - l) * .2;
+        final lift = (flying ? arc : rebound) * size * 1.1;
+        final left = math.pow(1 - a, 1.6).toDouble();
+        final squash =
+            flying ? 0.0 : math.sin(l * math.pi * 2.5) * (1 - l) * .18;
+        return SizedBox.square(
+          dimension: size,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              // Coloured glow on the ground; it tightens as the dice rises.
+              Transform.scale(
+                scale: 1 - arc * .35,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: size * .9,
+                  height: size * .9,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                          color: widget.color.withValues(alpha: .75),
+                          blurRadius: size * .4),
+                    ],
+                  ),
+                ),
+              ),
+              Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..translateByDouble(0, -lift, 0, 1)
+                  ..scaleByDouble((1 + arc * .3) * (1 + squash),
+                      (1 + arc * .3) * (1 - squash), 1, 1),
+                child: CustomPaint(
+                  size: Size.square(size),
+                  painter: _DicePainter(
+                    widget.value,
+                    rx: left * 4 * math.pi,
+                    ry: left * 3 * math.pi,
+                    rz: left * math.pi,
+                  ),
+                ),
+              ),
             ],
           ),
-          child: CustomPaint(painter: _DicePainter(value)),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
 class _DicePainter extends CustomPainter {
-  const _DicePainter(this.value);
+  const _DicePainter(this.value, {this.rx = 0, this.ry = 0, this.rz = 0});
   final int value;
+  final double rx, ry, rz;
 
   @override
-  void paint(Canvas canvas, Size size) =>
-      paintDice(canvas, Offset.zero & size, value, angle: -.18);
+  void paint(Canvas canvas, Size size) {
+    if (rx == 0 && ry == 0 && rz == 0) {
+      paintDice(canvas, Offset.zero & size, value, angle: -.14);
+    } else {
+      paintDice3D(canvas, size.center(Offset(0, -size.height * .04)),
+          size.width * .78, value, rx: rx, ry: ry, rz: rz);
+    }
+  }
 
   @override
-  bool shouldRepaint(_DicePainter old) => old.value != value;
+  bool shouldRepaint(_DicePainter old) =>
+      old.value != value || old.rx != rx || old.ry != ry || old.rz != rz;
 }
