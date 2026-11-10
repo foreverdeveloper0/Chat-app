@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../art/pieces.dart';
-import '../art/play_board.dart';
+import '../theme/board_assets.dart';
 import '../screens/game_screen.dart';
 import '../theme/app_colors.dart';
 import 'game_card.dart';
@@ -73,10 +72,8 @@ Future<void> showGameSetup(BuildContext context, {required bool vsComputer}) {
                             children: [
                               for (final p in _seatPlans[n]!)
                                 if (!vsComputer || p != 3)
-                                  CustomPaint(
-                                    size: const Size(17, 27),
-                                    painter: PawnPainter(playerColors[p]),
-                                  ),
+                                  Image.asset(pawnAssets[p],
+                                      width: 20, height: 32),
                             ],
                           ),
                           const SizedBox(height: 8),

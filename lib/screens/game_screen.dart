@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../art/icons.dart';
 import '../art/pieces.dart';
-import '../art/play_board.dart';
 import '../game/ludo_controller.dart';
 import '../game/ludo_rules.dart';
 import '../theme/app_colors.dart';
+import '../theme/board_assets.dart';
 import '../widgets/game_card.dart';
 
 class GameScreen extends StatefulWidget {
@@ -255,8 +255,8 @@ class _Board extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rim = size * boardRim;
-    final cell = (size - rim * 2) / 15;
+    final rim = size * gridInset;
+    final cell = size * gridSize / 15;
     final all = [for (final p in game.seats) ...game.tokens[p]];
 
     // Tokens sharing a cell shrink and sit side by side.
@@ -296,7 +296,7 @@ class _Board extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * .028),
+        borderRadius: BorderRadius.circular(size * .04),
         boxShadow: const [
           BoxShadow(color: Color(0x88000010), blurRadius: 24, offset: Offset(0, 12)),
         ],
@@ -304,8 +304,9 @@ class _Board extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          const Positioned.fill(
-            child: RepaintBoundary(child: CustomPaint(painter: PlayBoardPainter())),
+          Positioned.fill(
+            child: Image.asset(boardAsset,
+                fit: BoxFit.fill, filterQuality: FilterQuality.medium),
           ),
           if (game.phase != Phase.gameOver)
             AnimatedPositioned(
@@ -394,40 +395,69 @@ class _TokenViewState extends State<_TokenView>
 
   @override
   Widget build(BuildContext context) {
-    final painter = AnimatedBuilder(
+    final view = AnimatedBuilder(
       animation: Listenable.merge([_hop, if (widget.movable) widget.pulse]),
-      builder: (_, _) => CustomPaint(
-        size: Size.infinite,
-        painter: _TokenPainter(
-          color: playerColors[widget.token.player],
-          cell: widget.cell,
-          scale: widget.scale,
-          hop: math.sin(_hop.value * math.pi),
-          pulse: widget.movable ? widget.pulse.value : null,
-        ),
-      ),
+      builder: (_, _) {
+        final hop = math.sin(_hop.value * math.pi);
+        final pulse = widget.movable ? widget.pulse.value : null;
+        return LayoutBuilder(builder: (_, box) {
+          final foot = Offset(box.maxWidth / 2, box.maxHeight * .72);
+          final lift = hop * widget.cell * .5 + (pulse ?? 0) * widget.cell * .16;
+          final pw = widget.cell * .86 * widget.scale * (1 + hop * .12);
+          final ph = pw / pawnAspect;
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _TokenBasePainter(
+                    color: playerColors[widget.token.player],
+                    cell: widget.cell,
+                    width: pw,
+                    hop: hop,
+                    pulse: pulse,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: foot.dx - pw / 2,
+                top: foot.dy - ph * .95 - lift,
+                width: pw,
+                height: ph,
+                child: Image.asset(
+                  pawnAssets[widget.token.player],
+                  fit: BoxFit.fill,
+                  filterQuality: FilterQuality.medium,
+                  gaplessPlayback: true,
+                ),
+              ),
+            ],
+          );
+        });
+      },
     );
     return GestureDetector(
       behavior: widget.onTap == null
           ? HitTestBehavior.translucent
           : HitTestBehavior.opaque,
       onTap: widget.onTap,
-      child: RepaintBoundary(child: painter),
+      child: RepaintBoundary(child: view),
     );
   }
 }
 
-class _TokenPainter extends CustomPainter {
-  const _TokenPainter({
+/// Ground shadow and the pulsing "you can move me" ring under a pawn.
+class _TokenBasePainter extends CustomPainter {
+  const _TokenBasePainter({
     required this.color,
     required this.cell,
-    required this.scale,
+    required this.width,
     required this.hop,
     required this.pulse,
   });
   final Color color;
   final double cell;
-  final double scale;
+  final double width;
   final double hop;
   final double? pulse;
 
@@ -435,40 +465,33 @@ class _TokenPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final foot = Offset(size.width / 2, size.height * .72);
     if (pulse != null) {
-      final ground = foot - Offset(0, cell * .12);
-      canvas.drawCircle(ground, cell * (.46 + .2 * pulse!),
-          Paint()..color = Colors.white.withValues(alpha: .55 - .35 * pulse!));
+      final ground = foot - Offset(0, cell * .02);
+      final r = cell * (.46 + .2 * pulse!);
+      canvas.drawCircle(ground, r,
+          Paint()..color = Colors.white.withValues(alpha: .5 - .3 * pulse!));
       canvas.drawCircle(
         ground,
-        cell * (.46 + .2 * pulse!),
+        r,
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = cell * .1
           ..color = color,
       );
     }
-    final lift = hop * cell * .5 + (pulse ?? 0) * cell * .16;
-    final w = cell * .8 * scale * (1 + hop * .14);
-    final h = w * 1.55;
-    // Ground shadow stays put while the piece hops.
     canvas.drawOval(
       Rect.fromCenter(
-          center: foot + Offset(w * .06, 0), width: w * .95, height: w * .34),
-      Paint()..color = Color.fromRGBO(0, 0, 0, .3 - hop * .14),
-    );
-    paintPawn(
-      canvas,
-      Rect.fromLTWH(foot.dx - w / 2, foot.dy - h * .88 - lift, w, h),
-      color,
-      shadow: false,
+          center: foot + Offset(width * .05, 0),
+          width: width * 1.0,
+          height: width * .34),
+      Paint()..color = Color.fromRGBO(0, 0, 0, .32 - hop * .16),
     );
   }
 
   @override
-  bool shouldRepaint(_TokenPainter old) =>
+  bool shouldRepaint(_TokenBasePainter old) =>
       old.hop != hop ||
       old.pulse != pulse ||
-      old.scale != scale ||
+      old.width != width ||
       old.cell != cell ||
       old.color != color;
 }
@@ -507,7 +530,7 @@ class _PlayerPanel extends StatelessWidget {
           };
 
     final children = [
-      CustomPaint(size: const Size(22, 34), painter: PawnPainter(color)),
+      Image.asset(pawnAssets[player], width: 24, height: 38, fit: BoxFit.contain),
       const SizedBox(width: 8),
       Expanded(
         child: Column(
