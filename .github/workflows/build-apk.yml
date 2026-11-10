@@ -1,0 +1,46 @@
+name: Build demo APK
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.9'
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build apk --release
+      - run: cp build/app/outputs/flutter-apk/app-release.apk elite-play-ludo-demo.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: elite-play-ludo-demo
+          path: elite-play-ludo-demo.apk
+      - name: Publish demo release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete demo --cleanup-tag --yes || true
+          gh release create demo elite-play-ludo-demo.apk \
+            --prerelease --target "$GITHUB_SHA" \
+            --title "Elite Play BD Ludo - demo APK" \
+            --notes "Demo build of the home page. Download the APK below and install it on Android."
