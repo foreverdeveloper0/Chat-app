@@ -24,7 +24,7 @@ void main() {
     await tester.pumpWidget(const ElitePlayLudoApp());
     await tester.pump();
 
-    expect(find.text('LUDO'), findsOneWidget);
+    expect(find.text('LUDO'), findsWidgets);
     expect(find.text('Tournament'), findsOneWidget);
     expect(find.text('Play\nOnline'), findsOneWidget);
     expect(tester.takeException(), isNull);

@@ -191,10 +191,12 @@ class _LudoWord extends StatelessWidget {
     );
     return Stack(
       children: [
-        Transform.translate(
-          offset: const Offset(0, 4),
-          child: Text('LUDO',
-              style: style.copyWith(color: const Color(0x8C0A0B2A))),
+        ExcludeSemantics(
+          child: Transform.translate(
+            offset: const Offset(0, 4),
+            child: Text('LUDO',
+                style: style.copyWith(color: const Color(0x8C0A0B2A))),
+          ),
         ),
         ShaderMask(
           blendMode: BlendMode.srcIn,
