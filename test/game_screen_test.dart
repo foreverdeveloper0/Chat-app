@@ -32,22 +32,28 @@ void main() {
     await tester.tap(find.text('2 Players'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump(const Duration(milliseconds: 1000));
-
+    // Board intro, then the "GAME START" banner.
+    await tester.pump(const Duration(milliseconds: 1600));
     expect(find.text('Player 1'), findsOneWidget);
     expect(find.text('Player 2'), findsOneWidget);
-    expect(find.text('Tap to roll'), findsOneWidget);
+    expect(find.textContaining('Prize 2K'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('GAME START'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1300));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('tap the dice'), findsOneWidget);
 
     // Play both seats: roll when asked, and when there is a real choice tap
     // every piece (only a movable one reacts).
     var rolls = 0;
     for (var i = 0; i < 3000 && rolls < 60; i++) {
-      final roll = find.text('Tap to roll');
-      if (roll.evaluate().isNotEmpty) {
-        await tester.tap(roll);
+      if (find.textContaining('tap the dice').evaluate().isNotEmpty) {
+        for (final p in [1, 3]) {
+          await tester.tap(find.byKey(ValueKey('panel-$p')),
+              warnIfMissed: false);
+        }
         rolls++;
-      } else if (find.text('Pick a piece').evaluate().isNotEmpty) {
+      } else if (find.textContaining('pick a piece').evaluate().isNotEmpty) {
         for (var k = 0; k < 16; k++) {
           final piece = find.byKey(ValueKey(k));
           if (piece.evaluate().isNotEmpty) {

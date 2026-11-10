@@ -56,6 +56,36 @@ void main() {
     c.dispose();
   });
 
+  test('finishing order: the match goes on until one player is left', () async {
+    final c = LudoController(
+        seats: [3, 0, 1, 2], bots: {0, 1, 2, 3}, speed: 0, random: Random(5));
+    final done = Completer<void>();
+    c.addListener(() {
+      if (c.phase == Phase.gameOver && !done.isCompleted) done.complete();
+    });
+    c.start();
+    await done.future.timeout(const Duration(seconds: 60));
+    expect(c.finished.toSet(), {0, 1, 2, 3});
+    expect(c.winner, c.finished.first);
+    for (final p in c.finished.take(3)) {
+      expect(c.homeCount(p), 4);
+    }
+    expect(c.rankOf(c.finished[1]), 2);
+    c.dispose();
+  });
+
+  test('a player who leaves is skipped and the last one standing wins', () async {
+    final c = LudoController(seats: [0, 1, 2], speed: 0, random: Random(2));
+    c.leave(1);
+    expect(c.active, [0, 2]);
+    await c.roll(forced: 3); // red has no move, turn passes over green
+    expect(c.current, 2);
+    c.leave(2);
+    expect(c.phase, Phase.gameOver);
+    expect(c.winner, 0);
+    c.dispose();
+  });
+
   test('a full bot game always finishes with a winner', () async {
     for (final seed in [1, 2, 3]) {
       final c = LudoController(

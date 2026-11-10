@@ -20,37 +20,55 @@ class Token {
 
 enum Phase { awaitingRoll, rolling, landed, choosing, moving, gameOver }
 
-/// Runs a Ludo match: turn order, dice, moves, captures, bots and the
-/// step-by-step timing that the board animates against.
+/// Runs a Ludo match: turn order, dice, moves, captures, bots, turn timer,
+/// lives, finishing order and the step-by-step timing the board animates to.
 class LudoController extends ChangeNotifier {
   LudoController({
     required this.seats,
     this.bots = const {},
     Random? random,
     this.speed = 1,
+    this.turnSeconds = 0,
     this.onSfx,
+    this.onCapture,
   })  : assert(seats.length >= 2),
         _rng = random ?? Random(),
-        current = seats.first;
+        current = seats.first {
+    for (final p in seats) {
+      lives[p] = maxLives;
+    }
+  }
 
-  /// Active player ids in turn order.
+  static const maxLives = 5;
+  static const rollTicks = 10;
+  static const rollTickMs = 70;
+  static const landMs = 380;
+
+  /// Player ids in turn order.
   final List<int> seats;
   final Set<int> bots;
 
   /// Multiplier for every animation delay (0 makes the game instant).
   final double speed;
+
+  /// Seconds a human has to act before losing a life; 0 turns the timer off.
+  final int turnSeconds;
   final Random _rng;
 
   /// Called at each audible moment of the match.
-  final void Function(Sfx)? onSfx;
+  final void Function(Sfx sfx, int variant)? onSfx;
+  final void Function(int by, int victim)? onCapture;
 
   final tokens = [
     for (var p = 0; p < 4; p++) [for (var i = 0; i < 4; i++) Token(p, i)],
   ];
+  final lives = <int, int>{};
 
-  static const rollTicks = 12;
-  static const rollTickMs = 70;
-  static const landMs = 380;
+  /// Players who got all four pieces home, best first.
+  final finished = <int>[];
+
+  /// Players who ran out of lives or quit.
+  final left = <int>{};
 
   int current;
   Phase phase = Phase.awaitingRoll;
@@ -60,19 +78,33 @@ class LudoController extends ChangeNotifier {
   List<Token> movable = const [];
   int? winner;
   String message = '';
+
+  /// Changes every time the turn timer restarts.
+  int turnSerial = 0;
+  bool timerRunning = false;
+  Timer? _timer;
+  bool _autoPlay = false;
   bool _disposed = false;
 
   bool isBot(int player) => bots.contains(player);
   bool get humanTurn => !isBot(current);
   int homeCount(int player) => tokens[player].where((t) => t.isHome).length;
+  bool isActive(int p) => !finished.contains(p) && !left.contains(p);
+  List<int> get active => [for (final p in seats) if (isActive(p)) p];
+
+  /// 1 for the first finisher, 0 while still playing.
+  int rankOf(int player) => finished.indexOf(player) + 1;
 
   void start() => _beginTurn();
 
   @override
   void dispose() {
     _disposed = true;
+    _timer?.cancel();
     super.dispose();
   }
+
+  void _sfx(Sfx s, [int variant = 0]) => onSfx?.call(s, variant);
 
   Future<bool> _wait(int ms) async {
     await Future<void>.delayed(Duration(milliseconds: (ms * speed).round()));
@@ -83,27 +115,99 @@ class LudoController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  void _stopTimer() {
+    _timer?.cancel();
+    timerRunning = false;
+  }
+
+  void _armTimer() {
+    _stopTimer();
+    if (turnSeconds <= 0 || !humanTurn) return;
+    turnSerial++;
+    timerRunning = true;
+    _timer = Timer(Duration(seconds: turnSeconds), _onTimeout);
+  }
+
+  void _onTimeout() {
+    if (_disposed || phase == Phase.gameOver) return;
+    timerRunning = false;
+    final p = current;
+    lives[p] = (lives[p] ?? 1) - 1;
+    _sfx(Sfx.lifeLost);
+    if (lives[p]! <= 0) {
+      leave(p);
+      return;
+    }
+    // Play the turn for them.
+    _autoPlay = true;
+    if (phase == Phase.awaitingRoll) {
+      roll();
+    } else if (phase == Phase.choosing && movable.isNotEmpty) {
+      move(_botPick());
+    } else {
+      _notify();
+    }
+  }
+
   Future<void> _beginTurn() async {
     phase = Phase.awaitingRoll;
     movable = const [];
-    _notify();
+    _autoPlay = false;
     if (isBot(current)) {
+      _stopTimer();
+      _notify();
       if (!await _wait(650)) return;
       await roll();
+    } else {
+      _armTimer();
+      _sfx(Sfx.turn);
+      _notify();
     }
   }
 
   Future<void> _nextPlayer() {
     sixes = 0;
-    current = seats[(seats.indexOf(current) + 1) % seats.length];
+    var i = seats.indexOf(current);
+    do {
+      i = (i + 1) % seats.length;
+    } while (!isActive(seats[i]));
+    current = seats[i];
     return _beginTurn();
+  }
+
+  void _endGame() {
+    _stopTimer();
+    // Whoever is still playing takes the next place.
+    finished.addAll(active);
+    winner = finished.isEmpty ? null : finished.first;
+    phase = Phase.gameOver;
+    movable = const [];
+    _sfx(Sfx.win);
+    _notify();
+  }
+
+  /// Removes a player from the match (out of lives or quit).
+  void leave(int player) {
+    if (!isActive(player) || phase == Phase.gameOver) return;
+    left.add(player);
+    for (final t in tokens[player]) {
+      t.progress = LudoRules.yard;
+    }
+    if (active.length <= 1) return _endGame();
+    if (player == current) {
+      _stopTimer();
+      _nextPlayer();
+    } else {
+      _notify();
+    }
   }
 
   Future<void> roll({int? forced}) async {
     if (phase != Phase.awaitingRoll) return;
+    _stopTimer();
     phase = Phase.rolling;
     message = '';
-    onSfx?.call(Sfx.diceRoll);
+    _sfx(Sfx.diceRoll);
     // The result is fixed at the throw so the 3D dice can tumble towards it;
     // it stays in the air for rollTicks * rollTickMs.
     dice = forced ?? 1 + _rng.nextInt(6);
@@ -111,7 +215,7 @@ class LudoController extends ChangeNotifier {
     _notify();
     if (!await _wait(rollTicks * rollTickMs)) return;
     HapticFeedback.mediumImpact();
-    onSfx?.call(Sfx.diceLand);
+    _sfx(Sfx.diceLand);
     // Let the landing bounce finish before anything moves.
     phase = Phase.landed;
     _notify();
@@ -143,7 +247,7 @@ class LudoController extends ChangeNotifier {
     }
     _notify();
 
-    if (isBot(current)) {
+    if (isBot(current) || _autoPlay) {
       if (!await _wait(550)) return;
       return move(_botPick());
     }
@@ -154,11 +258,15 @@ class LudoController extends ChangeNotifier {
       if (phase == Phase.choosing && movable.isNotEmpty) {
         return move(movable.first);
       }
+      return;
     }
+    _armTimer();
+    _notify();
   }
 
   Future<void> move(Token token) async {
     if (phase != Phase.choosing || !movable.contains(token)) return;
+    _stopTimer();
     phase = Phase.moving;
     movable = const [];
     final leaving = token.inYard;
@@ -166,7 +274,7 @@ class LudoController extends ChangeNotifier {
     for (var i = 0; i < steps; i++) {
       token.progress++;
       HapticFeedback.selectionClick();
-      onSfx?.call(leaving ? Sfx.enter : Sfx.step);
+      leaving ? _sfx(Sfx.enter) : _sfx(Sfx.step, i);
       _notify();
       if (!await _wait(170)) return;
     }
@@ -174,30 +282,32 @@ class LudoController extends ChangeNotifier {
     var captured = false;
     if (token.onTrack && !LudoRules.isSafe(token.player, token.progress)) {
       final cell = LudoRules.trackIndex(token.player, token.progress);
-      for (final p in seats) {
+      for (final p in active) {
         if (p == token.player) continue;
         for (final other in tokens[p]) {
           if (other.onTrack && LudoRules.trackIndex(p, other.progress) == cell) {
             other.progress = LudoRules.yard;
             captured = true;
+            onCapture?.call(token.player, p);
           }
         }
       }
     }
-    if (token.isHome) onSfx?.call(Sfx.home);
+    if (token.isHome) _sfx(Sfx.home);
     if (captured) {
       HapticFeedback.heavyImpact();
-      onSfx?.call(Sfx.capture);
+      _sfx(Sfx.capture);
       _notify();
       if (!await _wait(520)) return;
     }
 
     if (homeCount(current) == 4) {
-      winner = current;
-      phase = Phase.gameOver;
-      onSfx?.call(Sfx.win);
+      finished.add(current);
+      if (active.length <= 1) return _endGame();
+      _sfx(Sfx.rank);
       _notify();
-      return;
+      if (!await _wait(600)) return;
+      return _nextPlayer();
     }
     final again = dice == 6 || captured || token.isHome;
     return again ? _beginTurn() : _nextPlayer();
@@ -207,7 +317,7 @@ class LudoController extends ChangeNotifier {
   bool _threatened(int player, int progress) {
     if (progress < 0 || LudoRules.isSafe(player, progress)) return false;
     final cell = LudoRules.trackIndex(player, progress);
-    for (final p in seats) {
+    for (final p in active) {
       if (p == player) continue;
       for (final o in tokens[p]) {
         if (!o.onTrack) continue;
@@ -234,7 +344,7 @@ class LudoController extends ChangeNotifier {
       if (dest <= LudoRules.lastTrack) {
         if (!LudoRules.isSafe(t.player, dest)) {
           final cell = LudoRules.trackIndex(t.player, dest);
-          for (final p in seats) {
+          for (final p in active) {
             if (p == t.player) continue;
             for (final o in tokens[p]) {
               if (o.onTrack && LudoRules.trackIndex(p, o.progress) == cell) {

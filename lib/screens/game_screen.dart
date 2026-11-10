@@ -1,15 +1,16 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../art/icons.dart';
 import '../art/pieces.dart';
+import '../game/coins.dart';
 import '../game/ludo_controller.dart';
 import '../game/ludo_rules.dart';
 import '../game/sounds.dart';
 import '../theme/app_colors.dart';
 import '../theme/board_assets.dart';
-import '../widgets/game_card.dart';
+import '../widgets/game_hud.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({
@@ -18,6 +19,8 @@ class GameScreen extends StatefulWidget {
     required this.seats,
     required this.bots,
     required this.names,
+    this.entry = 1000,
+    this.roomId = '000000',
   });
 
   final String title;
@@ -25,20 +28,34 @@ class GameScreen extends StatefulWidget {
   final Set<int> bots;
   final Map<int, String> names;
 
+  /// Coins each player puts in; the winner takes entry x players.
+  final int entry;
+  final String roomId;
+
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
 
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
+  static const _turnSeconds = 20;
+
   late LudoController _game;
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 650),
-  )..repeat(reverse: true);
-  late final AnimationController _intro = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 750),
-  );
+  late final _spin = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 2600))
+    ..repeat();
+  late final _pulse = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 650))
+    ..repeat(reverse: true);
+  late final _intro = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1500));
+  late final _banner = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1700));
+
+  final _bubbles = <int, String>{};
+  final _bubbleTimers = <int, Timer>{};
+  bool _mic = false;
+
+  int get _prize => widget.entry * widget.seats.length;
 
   @override
   void initState() {
@@ -48,24 +65,93 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _newGame() {
     _game = LudoController(
-        seats: widget.seats, bots: widget.bots, onSfx: Sounds.play);
+      seats: widget.seats,
+      bots: widget.bots,
+      turnSeconds: _turnSeconds,
+      onSfx: Sounds.play,
+      onCapture: _onCapture,
+    );
+    _banner.value = 0;
     _intro.forward(from: 0).whenComplete(() {
-      if (mounted) _game.start();
+      if (!mounted) return;
+      Sounds.play(Sfx.start);
+      _banner.forward(from: 0).whenComplete(() {
+        if (mounted) _game.start();
+      });
     });
   }
 
   void _restart() {
     final old = _game;
+    for (final t in _bubbleTimers.values) {
+      t.cancel();
+    }
+    _bubbles.clear();
     setState(_newGame);
     old.dispose();
   }
 
   @override
   void dispose() {
+    for (final t in _bubbleTimers.values) {
+      t.cancel();
+    }
     _game.dispose();
+    _spin.dispose();
     _pulse.dispose();
     _intro.dispose();
+    _banner.dispose();
     super.dispose();
+  }
+
+  // ── Chat ──
+
+  void _say(int player, String text) {
+    if (!mounted) return;
+    _bubbleTimers[player]?.cancel();
+    setState(() => _bubbles[player] = text);
+    _bubbleTimers[player] = Timer(const Duration(milliseconds: 2600), () {
+      if (mounted) setState(() => _bubbles.remove(player));
+    });
+  }
+
+  /// Bots react when they capture or get captured.
+  void _onCapture(int by, int victim) {
+    final r = math.Random();
+    if (widget.bots.contains(by)) _say(by, const ['😎', '😂', '🔥'][r.nextInt(3)]);
+    if (widget.bots.contains(victim)) {
+      _say(victim, const ['😡', '😭', '😱'][r.nextInt(3)]);
+    }
+  }
+
+  /// Who is "speaking" when the chat button is used on this phone.
+  int get _speaker => widget.bots.isEmpty
+      ? _game.current
+      : widget.seats.firstWhere((p) => !widget.bots.contains(p));
+
+  Future<void> _openChat() async {
+    final text = await showChatSheet(context);
+    if (text == null) return;
+    Sounds.play(Sfx.chat);
+    _say(_speaker, text);
+  }
+
+  void _toggleMic() {
+    setState(() => _mic = !_mic);
+    Sounds.play(Sfx.tap);
+    if (_mic) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(milliseconds: 2200),
+          backgroundColor: AppColors.cardTop,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          content: Text('Mic on — voice is heard in online matches',
+              style: AppText.title.copyWith(fontSize: 14)),
+        ));
+    }
   }
 
   Future<void> _confirmLeave() async {
@@ -94,6 +180,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if ((leave ?? false) && mounted) Navigator.of(context).pop();
   }
 
+  String _status() {
+    final g = _game;
+    if (g.phase == Phase.gameOver) return '';
+    final name = shortName(widget.names[g.current] ?? 'Player');
+    if (g.humanTurn && g.phase == Phase.awaitingRoll) {
+      return '$name — tap the dice';
+    }
+    if (g.humanTurn && g.phase == Phase.choosing && g.timerRunning) {
+      return '$name — pick a piece';
+    }
+    return g.message;
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -117,34 +216,53 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               builder: (context, _) => LayoutBuilder(
                 builder: (context, box) {
                   final board = math.min(
-                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 250);
+                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 318);
                   return Stack(
                     children: [
                       Column(
                         children: [
-                          _Header(
-                            title: widget.title,
-                            message: _game.message,
+                          GameHeader(
+                            prize: _prize,
+                            entry: widget.entry,
+                            roomId: widget.roomId,
+                            status: _status(),
                             onBack: _confirmLeave,
                           ),
                           const Spacer(),
                           _panelRow(board, 0, 1),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 8),
                           _BoardIntro(
                             intro: _intro,
                             child: _Board(
-                                size: board, game: _game, pulse: _pulse),
+                              size: board,
+                              game: _game,
+                              spin: _spin,
+                              intro: _intro,
+                            ),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 8),
                           _panelRow(board, 3, 2),
                           const Spacer(),
+                          GameBottomBar(
+                            micOn: _mic,
+                            onMic: _toggleMic,
+                            onChat: _openChat,
+                          ),
+                          const SizedBox(height: 6),
                         ],
                       ),
-                      if (_game.winner != null)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: StartBanner(animation: _banner),
+                        ),
+                      ),
+                      if (_game.phase == Phase.gameOver)
                         Positioned.fill(
-                          child: _WinOverlay(
-                            player: _game.winner!,
-                            name: widget.names[_game.winner!] ?? 'Player',
+                          child: ResultOverlay(
+                            order: _game.finished,
+                            left: _game.left,
+                            names: widget.names,
+                            prize: _prize,
                             onAgain: _restart,
                             onHome: () => Navigator.of(context).pop(),
                           ),
@@ -163,74 +281,21 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Widget _panelRow(double width, int left, int right) {
     Widget panel(int p, bool mirrored) => Expanded(
           child: widget.seats.contains(p)
-              ? _PlayerPanel(
+              ? PlayerPanel(
                   player: p,
                   name: widget.names[p] ?? 'Player',
+                  isYou: widget.names[p] == 'You',
                   game: _game,
                   pulse: _pulse,
                   mirrored: mirrored,
+                  bubble: _bubbles[p],
                 )
-              : const SizedBox(height: 62),
+              : const SizedBox(height: PlayerPanel.height),
         );
     return SizedBox(
       width: width,
       child: Row(
-        children: [panel(left, false), const SizedBox(width: 10), panel(right, true)],
-      ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({required this.title, required this.message, required this.onBack});
-  final String title;
-  final String message;
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-      child: Row(
-        children: [
-          GameCard(
-            width: 44,
-            height: 44,
-            radius: 14,
-            onTap: onBack,
-            child: const Icon(Icons.arrow_back_rounded, color: AppColors.cream),
-          ),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title, style: AppText.title.copyWith(fontSize: 20)),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: Text(
-                    message,
-                    key: ValueKey(message),
-                    style: AppText.title.copyWith(
-                        fontSize: 13, color: AppColors.mint, height: 1.3),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          ValueListenableBuilder(
-            valueListenable: Sounds.muted,
-            builder: (_, muted, _) => GameCard(
-              width: 44,
-              height: 44,
-              radius: 14,
-              onTap: () => Sounds.muted.value = !muted,
-              child: Icon(
-                muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                color: muted ? const Color(0xFFA9AEDC) : AppColors.cream,
-              ),
-            ),
-          ),
-        ],
+        children: [panel(left, false), const SizedBox(width: 8), panel(right, true)],
       ),
     );
   }
@@ -244,12 +309,13 @@ class _BoardIntro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final curve = CurvedAnimation(parent: intro, curve: Curves.easeOutBack);
+    final curve = CurvedAnimation(
+        parent: intro, curve: const Interval(0, .5, curve: Curves.easeOutBack));
     return AnimatedBuilder(
       animation: curve,
       child: child,
       builder: (_, child) => Opacity(
-        opacity: intro.value.clamp(0, 1),
+        opacity: (intro.value * 4).clamp(0, 1),
         child: Transform.rotate(
           angle: (1 - curve.value) * -.6,
           child: Transform.scale(scale: .55 + .45 * curve.value, child: child),
@@ -261,19 +327,41 @@ class _BoardIntro extends StatelessWidget {
 
 // ───────────────────────── Board + tokens ─────────────────────────
 
+/// Where token [i] of [n] sharing one cell sits (offset in cells) and how
+/// big it is, so any number of pawns stays inside the square.
+(Offset, double) _stackSlot(int i, int n) {
+  if (n == 1) return (Offset.zero, .92);
+  final cols = n <= 4 ? 2 : (n <= 9 ? 3 : 4);
+  final rows = (n / cols).ceil();
+  final scale = switch (cols) { 2 => rows == 1 ? .7 : .54, 3 => .4, _ => .31 };
+  final dx = (i % cols - (cols - 1) / 2) * (cols == 2 ? .44 : .92 / cols);
+  final dy = rows == 1
+      ? 0.0
+      : (i ~/ cols - (rows - 1) / 2) * math.min(.36, .84 / rows) + .04;
+  return (Offset(dx, dy), scale);
+}
+
 class _Board extends StatelessWidget {
-  const _Board({required this.size, required this.game, required this.pulse});
+  const _Board({
+    required this.size,
+    required this.game,
+    required this.spin,
+    required this.intro,
+  });
   final double size;
   final LudoController game;
-  final Animation<double> pulse;
+  final Animation<double> spin;
+  final Animation<double> intro;
 
   @override
   Widget build(BuildContext context) {
     final rim = size * gridInset;
     final cell = size * gridSize / 15;
-    final all = [for (final p in game.seats) ...game.tokens[p]];
+    final all = [
+      for (final p in game.seats)
+        if (!game.left.contains(p)) ...game.tokens[p],
+    ];
 
-    // Tokens sharing a cell shrink and sit side by side.
     final groups = <Offset, List<Token>>{};
     for (final t in all) {
       if (t.progress >= 0 && !t.isHome) {
@@ -287,23 +375,45 @@ class _Board extends StatelessWidget {
       var pos = LudoRules.position(t.player, t.index, t.progress);
       var scale = t.inYard ? 1.12 : (t.isHome ? .68 : .92);
       final group = groups[pos];
-      if (group != null && group.length > 1) {
-        final i = group.indexOf(t), n = group.length;
-        scale = n > 2 ? .62 : .74;
-        pos += Offset((i - (n - 1) / 2) * (n > 2 ? .26 : .34),
-            n > 2 ? (i.isEven ? -.1 : .12) : 0);
+      if (group != null) {
+        final (offset, s) = _stackSlot(group.indexOf(t), group.length);
+        pos += offset;
+        scale = s;
       }
       placed.add((t, pos, scale));
     }
-    // Paint back-to-front; movable tokens always on top.
+    // Paint back-to-front; movable pawns always end up on top.
     placed.sort((a, b) {
       final ma = game.movable.contains(a.$1), mb = game.movable.contains(b.$1);
       if (ma != mb) return ma ? 1 : -1;
       return a.$2.dy.compareTo(b.$2.dy);
     });
 
+    // One spinning ring per square that holds a movable pawn.
+    final rings = <Offset, (Offset, double, Color)>{};
+    for (final (t, pos, scale) in placed) {
+      if (!game.movable.contains(t)) continue;
+      final base = LudoRules.position(t.player, t.index, t.progress);
+      final crowded = (groups[base]?.length ?? 1) > 1;
+      rings.putIfAbsent(
+        base,
+        () => crowded
+            ? (
+                Offset(rim + base.dx * cell, rim + (base.dy + .02) * cell),
+                cell * .56,
+                playerDeep[t.player],
+              )
+            : (
+                // Centred on the pawn's base, a touch wider than it.
+                Offset(rim + pos.dx * cell,
+                    rim + (pos.dy + .16 - .22 * scale) * cell),
+                cell * .86 * scale * .62,
+                playerDeep[t.player],
+              ),
+      );
+    }
+
     final bw = cell * 1.6, bh = cell * 2.1;
-    final active = LudoRules.yardOrigins[game.current];
     final choosing = game.phase == Phase.choosing && game.humanTurn;
 
     return Container(
@@ -325,23 +435,29 @@ class _Board extends StatelessWidget {
           Positioned.fill(
             child: IgnorePointer(
               child: CustomPaint(
-                painter: _YardPadsPainter(
-                    seats: game.seats, rim: rim, cell: cell),
+                painter: _YardPadsPainter(rim: rim, cell: cell),
               ),
             ),
           ),
-          if (game.phase != Phase.gameOver)
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutCubic,
-              left: rim + active.$1 * cell,
-              top: rim + active.$2 * cell,
-              width: cell * 6,
-              height: cell * 6,
+          for (final p in game.seats)
+            if (game.left.contains(p) || game.rankOf(p) > 0)
+              Positioned(
+                left: rim + LudoRules.yardOrigins[p].$1 * cell,
+                top: rim + LudoRules.yardOrigins[p].$2 * cell,
+                width: cell * 6,
+                height: cell * 6,
+                child: YardBadge(
+                  cell: cell,
+                  rank: game.rankOf(p),
+                  left: game.left.contains(p),
+                ),
+              ),
+          if (rings.isNotEmpty)
+            Positioned.fill(
               child: IgnorePointer(
-                child: FadeTransition(
-                  opacity: Tween(begin: .0, end: .3).animate(pulse),
-                  child: const ColoredBox(color: Colors.white),
+                child: CustomPaint(
+                  painter: _RingsPainter(
+                      rings.values.toList(), cell, spin),
                 ),
               ),
             ),
@@ -359,7 +475,9 @@ class _Board extends StatelessWidget {
                 progress: t.progress,
                 cell: cell,
                 scale: scale,
-                pulse: pulse,
+                order: game.seats.indexOf(t.player) * 4 + t.index,
+                intro: intro,
+                spin: spin,
                 movable: game.movable.contains(t),
                 onTap: choosing && game.movable.contains(t)
                     ? () => game.move(t)
@@ -378,7 +496,9 @@ class _TokenView extends StatefulWidget {
     required this.progress,
     required this.cell,
     required this.scale,
-    required this.pulse,
+    required this.order,
+    required this.intro,
+    required this.spin,
     required this.movable,
     required this.onTap,
   });
@@ -386,7 +506,9 @@ class _TokenView extends StatefulWidget {
   final int progress;
   final double cell;
   final double scale;
-  final Animation<double> pulse;
+  final int order;
+  final Animation<double> intro;
+  final Animation<double> spin;
   final bool movable;
   final VoidCallback? onTap;
 
@@ -418,42 +540,58 @@ class _TokenViewState extends State<_TokenView>
   @override
   Widget build(BuildContext context) {
     final view = AnimatedBuilder(
-      animation: Listenable.merge([_hop, if (widget.movable) widget.pulse]),
+      animation: Listenable.merge(
+          [_hop, widget.intro, if (widget.movable) widget.spin]),
       builder: (_, _) {
         final hop = math.sin(_hop.value * math.pi);
-        final pulse = widget.movable ? widget.pulse.value : null;
+        // Pawns drop into the yards one after another once the board is in.
+        final drop = ((widget.intro.value - .45) / .55 * 2.3 -
+                widget.order * .08)
+            .clamp(0.0, 1.0);
+        final landed = Curves.easeOutBack.transform(drop);
+        final bob = widget.movable
+            ? (math.sin(widget.spin.value * 4 * math.pi) * .5 + .5) *
+                widget.cell *
+                .12
+            : 0.0;
         return LayoutBuilder(builder: (_, box) {
           final foot = Offset(box.maxWidth / 2, box.maxHeight * .72);
-          final lift = hop * widget.cell * .5 + (pulse ?? 0) * widget.cell * .16;
+          final lift =
+              hop * widget.cell * .5 + bob + (1 - landed) * widget.cell * 2.2;
           final pw = widget.cell * .86 * widget.scale * (1 + hop * .12);
           final ph = pw / pawnAspect;
-          return Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _TokenBasePainter(
-                    color: playerColors[widget.token.player],
-                    cell: widget.cell,
-                    width: pw,
-                    hop: hop,
-                    pulse: pulse,
+          return Opacity(
+            opacity: (drop * 3).clamp(0, 1),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  left: foot.dx - pw * .52,
+                  top: foot.dy - pw * .17,
+                  width: pw * 1.08,
+                  height: pw * .34,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Color.fromRGBO(0, 0, 0, .3 - hop * .15),
+                      borderRadius:
+                          const BorderRadius.all(Radius.elliptical(40, 14)),
+                    ),
                   ),
                 ),
-              ),
-              Positioned(
-                left: foot.dx - pw / 2,
-                top: foot.dy - ph * .95 - lift,
-                width: pw,
-                height: ph,
-                child: Image.asset(
-                  pawnAssets[widget.token.player],
-                  fit: BoxFit.fill,
-                  filterQuality: FilterQuality.medium,
-                  gaplessPlayback: true,
+                Positioned(
+                  left: foot.dx - pw / 2,
+                  top: foot.dy - ph * .95 - lift,
+                  width: pw,
+                  height: ph,
+                  child: Image.asset(
+                    pawnAssets[widget.token.player],
+                    fit: BoxFit.fill,
+                    filterQuality: FilterQuality.medium,
+                    gaplessPlayback: true,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         });
       },
@@ -468,14 +606,47 @@ class _TokenViewState extends State<_TokenView>
   }
 }
 
+/// Dashed rings that spin (without resizing) under pawns that can move.
+class _RingsPainter extends CustomPainter {
+  _RingsPainter(this.rings, this.cell, this.spin) : super(repaint: spin);
+  final List<(Offset, double, Color)> rings;
+  final double cell;
+  final Animation<double> spin;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const dashes = 10;
+    const step = 2 * math.pi / dashes;
+    for (final (centre, radius, color) in rings) {
+      final rect = Rect.fromCircle(center: centre, radius: radius);
+      canvas.drawCircle(
+          centre, radius, Paint()..color = Colors.white.withValues(alpha: .35));
+      final under = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = cell * .15
+        ..color = Colors.white;
+      final over = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = cell * .085
+        ..color = color;
+      final start = spin.value * 2 * math.pi;
+      for (final paint in [under, over]) {
+        for (var i = 0; i < dashes; i++) {
+          canvas.drawArc(rect, start + i * step, step * .52, false, paint);
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingsPainter old) => true;
+}
+
 /// Soft coloured pads in each yard diamond marking where a pawn rests.
 class _YardPadsPainter extends CustomPainter {
-  const _YardPadsPainter({
-    required this.seats,
-    required this.rim,
-    required this.cell,
-  });
-  final List<int> seats;
+  const _YardPadsPainter({required this.rim, required this.cell});
   final double rim;
   final double cell;
 
@@ -518,123 +689,116 @@ class _YardPadsPainter extends CustomPainter {
       old.cell != cell || old.rim != rim;
 }
 
-/// Ground shadow and the pulsing "you can move me" ring under a pawn.
-class _TokenBasePainter extends CustomPainter {
-  const _TokenBasePainter({
-    required this.color,
-    required this.cell,
-    required this.width,
-    required this.hop,
-    required this.pulse,
-  });
-  final Color color;
-  final double cell;
-  final double width;
-  final double hop;
-  final double? pulse;
+// ───────────────────────── Player panel ─────────────────────────
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final foot = Offset(size.width / 2, size.height * .72);
-    if (pulse != null) {
-      final ground = foot - Offset(0, cell * .02);
-      final r = cell * (.46 + .2 * pulse!);
-      canvas.drawCircle(ground, r,
-          Paint()..color = Colors.white.withValues(alpha: .5 - .3 * pulse!));
-      canvas.drawCircle(
-        ground,
-        r,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = cell * .1
-          ..color = color,
-      );
-    }
-    canvas.drawOval(
-      Rect.fromCenter(
-          center: foot + Offset(width * .05, 0),
-          width: width * 1.0,
-          height: width * .34),
-      Paint()..color = Color.fromRGBO(0, 0, 0, .32 - hop * .16),
-    );
-  }
-
-  @override
-  bool shouldRepaint(_TokenBasePainter old) =>
-      old.hop != hop ||
-      old.pulse != pulse ||
-      old.width != width ||
-      old.cell != cell ||
-      old.color != color;
-}
-
-// ───────────────────────── Player panel + dice ─────────────────────────
-
-class _PlayerPanel extends StatelessWidget {
-  const _PlayerPanel({
+class PlayerPanel extends StatelessWidget {
+  const PlayerPanel({
+    super.key,
     required this.player,
     required this.name,
+    required this.isYou,
     required this.game,
     required this.pulse,
     required this.mirrored,
+    required this.bubble,
   });
+
+  static const height = 68.0;
+
   final int player;
   final String name;
+  final bool isYou;
   final LudoController game;
   final Animation<double> pulse;
   final bool mirrored;
+  final String? bubble;
 
   @override
   Widget build(BuildContext context) {
-    final active = game.current == player && game.phase != Phase.gameOver;
+    final over = game.phase == Phase.gameOver;
+    final gone = game.left.contains(player);
+    final rank = game.rankOf(player);
+    final active = game.current == player && !over && !gone && rank == 0;
     final canRoll =
         active && game.phase == Phase.awaitingRoll && !game.isBot(player);
     final color = playerColors[player];
-    final status = !active
-        ? 'Home ${game.homeCount(player)}/4'
-        : switch (game.phase) {
-            Phase.awaitingRoll => game.isBot(player) ? 'Thinking…' : 'Tap to roll',
-            Phase.rolling || Phase.landed => 'Rolling…',
-            Phase.choosing => game.movable.isEmpty
-                ? 'No move'
-                : (game.isBot(player) ? 'Thinking…' : 'Pick a piece'),
-            _ => 'Moving…',
-          };
+    final lives = game.lives[player] ?? 0;
+
+    final info = Column(
+      key: const ValueKey('info'),
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment:
+          mirrored ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(shortName(name),
+              maxLines: 1, style: AppText.title.copyWith(fontSize: 14.5)),
+        ),
+        const SizedBox(height: 5),
+        if (gone)
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('Left the game',
+                maxLines: 1,
+                style: AppText.title.copyWith(
+                    fontSize: 10.5, color: const Color(0xFFFF8A80))),
+          )
+        else if (rank > 0)
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('${ordinal(rank)} place',
+                maxLines: 1,
+                style: AppText.title
+                    .copyWith(fontSize: 11.5, color: rankColor(rank))),
+          )
+        else
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < LudoController.maxLives; i++)
+                  Icon(Icons.favorite_rounded,
+                      size: 11,
+                      color: i < lives
+                          ? const Color(0xFFFF4D67)
+                          : const Color(0xFF3A3F7A)),
+              ],
+            ),
+          ),
+      ],
+    );
 
     final children = [
-      Image.asset(pawnAssets[player], width: 24, height: 38, fit: BoxFit.contain),
-      const SizedBox(width: 8),
+      PlayerAvatar(
+        player: player,
+        isBot: game.isBot(player),
+        isYou: isYou,
+        rank: rank,
+        // The ring drains while a human is on the clock.
+        timer: active && game.timerRunning
+            ? (game.turnSerial, game.turnSeconds)
+            : null,
+      ),
+      const SizedBox(width: 7),
       Expanded(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment:
-              mirrored ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(name,
-                  maxLines: 1, style: AppText.title.copyWith(fontSize: 15.5)),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              status,
-              maxLines: 1,
-              style: AppText.title.copyWith(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: active ? AppColors.mint : const Color(0xFFA9AEDC),
-              ),
-            ),
-          ],
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: bubble == null
+              ? Align(
+                  alignment:
+                      mirrored ? Alignment.centerRight : Alignment.centerLeft,
+                  child: info)
+              : ChatBubble(key: ValueKey(bubble), text: bubble!),
         ),
       ),
-      const SizedBox(width: 8),
-      _Dice(
-        game: game,
+      const SizedBox(width: 6),
+      DiceSocket(
         active: active,
-        canRoll: canRoll,
-        pulse: pulse,
-        color: color,
+        child: active
+            ? _Dice(game: game, canRoll: canRoll, pulse: pulse, color: color)
+            : null,
       ),
     ];
 
@@ -646,44 +810,55 @@ class _PlayerPanel extends StatelessWidget {
               game.roll();
             }
           : null,
-      child: AnimatedContainer(
+      child: AnimatedOpacity(
         duration: const Duration(milliseconds: 250),
-        height: 62,
-        padding: const EdgeInsets.symmetric(horizontal: 9),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.cardTop, AppColors.cardBottom],
+        opacity: gone ? .5 : 1,
+        child: AnimatedContainer(
+          key: ValueKey('panel-$player'),
+          duration: const Duration(milliseconds: 250),
+          height: height,
+          padding: const EdgeInsets.symmetric(horizontal: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.lerp(AppColors.cardTop, color, active ? .22 : .08)!,
+                AppColors.cardBottom,
+              ],
+            ),
+            border: Border.all(
+              color: active ? color : AppColors.cardBorder,
+              width: active ? 2 : 1.2,
+            ),
+            boxShadow: [
+              if (active)
+                BoxShadow(color: color.withValues(alpha: .5), blurRadius: 16)
+              else
+                const BoxShadow(
+                    color: Color(0x40060720),
+                    blurRadius: 8,
+                    offset: Offset(0, 4)),
+            ],
           ),
-          border: Border.all(
-            color: active ? color : AppColors.cardBorder,
-            width: active ? 2.2 : 1.2,
-          ),
-          boxShadow: [
-            if (active)
-              BoxShadow(color: color.withValues(alpha: .55), blurRadius: 16),
-          ],
+          child: Row(children: mirrored ? children.reversed.toList() : children),
         ),
-        child: Row(children: mirrored ? children.reversed.toList() : children),
       ),
     );
   }
 }
 
-/// The dice is tossed up out of its slot, tumbles in the air, drops back
-/// and lands with a squashy bounce and a burst ring before showing its value.
+/// The dice is tossed a little way up out of its socket, tumbles as a real
+/// cube, drops back and lands with a squashy bounce and a burst ring.
 class _Dice extends StatefulWidget {
   const _Dice({
     required this.game,
-    required this.active,
     required this.canRoll,
     required this.pulse,
     required this.color,
   });
   final LudoController game;
-  final bool active;
   final bool canRoll;
   final Animation<double> pulse;
   final Color color;
@@ -696,6 +871,7 @@ class _DiceState extends State<_Dice> with SingleTickerProviderStateMixin {
   static const _airMs = LudoController.rollTicks * LudoController.rollTickMs;
   static const _totalMs = _airMs + LudoController.landMs;
   static const _air = _airMs / _totalMs; // share of the timeline spent airborne
+  static const _height = 34.0;
 
   late final AnimationController _toss = AnimationController(
     vsync: this,
@@ -707,7 +883,7 @@ class _DiceState extends State<_Dice> with SingleTickerProviderStateMixin {
   @override
   void didUpdateWidget(_Dice old) {
     super.didUpdateWidget(old);
-    final phase = widget.active ? widget.game.phase : null;
+    final phase = widget.game.phase;
     if (phase == Phase.rolling && _lastPhase != Phase.rolling) {
       _toss.forward(from: 0);
     }
@@ -722,96 +898,68 @@ class _DiceState extends State<_Dice> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    const size = 46.0;
-    if (!widget.active) {
-      return Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: AppColors.cardInset,
-          borderRadius: BorderRadius.circular(12),
-        ),
-      );
-    }
-    return SizedBox.square(
-      dimension: size,
-      child: AnimatedBuilder(
-        animation: Listenable.merge([_toss, widget.pulse]),
-        builder: (_, _) {
-          final t = _toss.value;
-          final flying = t < _air;
-          final a = flying ? t / _air : 1.0; // 0..1 through the air
-          final l = flying ? 0.0 : (t - _air) / (1 - _air); // 0..1 landing
+    const size = DiceSocket.diceSize;
+    return AnimatedBuilder(
+      animation: Listenable.merge([_toss, widget.pulse]),
+      builder: (_, _) {
+        final t = _toss.value;
+        final flying = t < _air;
+        final a = flying ? t / _air : 1.0; // 0..1 through the air
+        final l = flying ? 0.0 : (t - _air) / (1 - _air); // 0..1 landing
 
-          // Height: one big arc, then a small rebound.
-          final arc = 4 * a * (1 - a);
-          final rebound = flying ? 0.0 : math.sin(l * math.pi) * (1 - l) * .22;
-          final lift = (flying ? arc : rebound) * 96;
+        // Height: one arc, then a small rebound.
+        final arc = 4 * a * (1 - a);
+        final rebound = flying ? 0.0 : math.sin(l * math.pi) * (1 - l) * .22;
+        final lift = (flying ? arc : rebound) * _height;
 
-          // Tumble: spins fast at launch and eases onto the result face.
-          final left = math.pow(1 - a, 1.6).toDouble();
+        // Tumble: spins fast at launch and eases onto the result face.
+        final left = math.pow(1 - a, 1.6).toDouble();
 
-          // Squash on impact, then settle.
-          final squash =
-              flying ? 0.0 : math.sin(l * math.pi * 2.5) * (1 - l) * .2;
-          var scale = 1 + arc * .55;
-          if (widget.canRoll) scale *= .94 + .14 * widget.pulse.value;
+        // Squash on impact, then settle.
+        final squash =
+            flying ? 0.0 : math.sin(l * math.pi * 2.5) * (1 - l) * .18;
+        var scale = 1 + arc * .3;
+        if (widget.canRoll) scale *= .95 + .1 * widget.pulse.value;
 
-          return Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              // Ground shadow shrinks as the dice climbs.
-              Positioned(
-                bottom: -3,
-                child: Opacity(
-                  opacity: .35 * (1 - .7 * (lift / 96).clamp(0, 1)),
-                  child: Container(
-                    width: size * (.8 - .35 * (lift / 96).clamp(0, 1)),
-                    height: 7,
-                    decoration: const BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.all(Radius.elliptical(20, 4)),
+        return Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            // Impact ring.
+            if (!flying && l < 1)
+              Transform.scale(
+                scale: .7 + l * 1.3,
+                child: Container(
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: widget.color.withValues(alpha: (1 - l) * .9),
+                      width: 3 * (1 - l) + .5,
                     ),
                   ),
                 ),
               ),
-              // Impact ring.
-              if (!flying && l < 1)
-                Transform.scale(
-                  scale: .7 + l * 1.5,
-                  child: Container(
-                    width: size,
-                    height: size,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: widget.color.withValues(alpha: (1 - l) * .9),
-                        width: 3 * (1 - l) + .5,
-                      ),
-                    ),
-                  ),
-                ),
-              Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.identity()
-                  ..translateByDouble(0, -lift, 0, 1)
-                  ..scaleByDouble(
-                      scale * (1 + squash), scale * (1 - squash), 1, 1),
-                child: CustomPaint(
-                  size: const Size.square(size),
-                  painter: _DicePainter(
-                    widget.game.dice,
-                    rx: left * 5 * math.pi,
-                    ry: left * 4 * math.pi,
-                    rz: left * 1.5 * math.pi,
-                  ),
+            Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..translateByDouble(0, -lift, 0, 1)
+                ..scaleByDouble(
+                    scale * (1 + squash), scale * (1 - squash), 1, 1),
+              child: CustomPaint(
+                size: const Size.square(size),
+                painter: _DicePainter(
+                  widget.game.dice,
+                  rx: left * 4 * math.pi,
+                  ry: left * 3 * math.pi,
+                  rz: left * 1 * math.pi,
                 ),
               ),
-            ],
-          );
-        },
-      ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -824,10 +972,9 @@ class _DicePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (rx == 0 && ry == 0 && rz == 0) {
-      // At rest: the flat face with a little thickness underneath.
       paintDice(canvas, Offset.zero & size, value);
     } else {
-      paintDice3D(canvas, size.center(Offset(0, -size.height * .05)),
+      paintDice3D(canvas, size.center(Offset(0, -size.height * .04)),
           size.width * .78, value, rx: rx, ry: ry, rz: rz);
     }
   }
@@ -835,161 +982,4 @@ class _DicePainter extends CustomPainter {
   @override
   bool shouldRepaint(_DicePainter old) =>
       old.value != value || old.rx != rx || old.ry != ry || old.rz != rz;
-}
-
-// ───────────────────────── Win overlay ─────────────────────────
-
-class _WinOverlay extends StatefulWidget {
-  const _WinOverlay({
-    required this.player,
-    required this.name,
-    required this.onAgain,
-    required this.onHome,
-  });
-  final int player;
-  final String name;
-  final VoidCallback onAgain;
-  final VoidCallback onHome;
-
-  @override
-  State<_WinOverlay> createState() => _WinOverlayState();
-}
-
-class _WinOverlayState extends State<_WinOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 4),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 450),
-      curve: Curves.easeOutBack,
-      builder: (_, v, child) => ColoredBox(
-        color: Color.fromRGBO(8, 9, 32, .78 * v.clamp(0, 1)),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(painter: _ConfettiPainter(_c)),
-              ),
-            ),
-            Center(child: Transform.scale(scale: v, child: child)),
-          ],
-        ),
-      ),
-      child: Container(
-        width: 290,
-        padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(26),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.cardTop, AppColors.cardBottom],
-          ),
-          border: Border.all(color: playerColors[widget.player], width: 2.5),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Art(ArtKind.trophy, size: 110),
-            const SizedBox(height: 8),
-            Text(
-              '${widget.name} ${widget.name == 'You' ? 'win' : 'wins'}!',
-              textAlign: TextAlign.center,
-              style: AppText.title
-                  .copyWith(fontSize: 28, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 18),
-            _WideButton(label: 'Play again', filled: true, onTap: widget.onAgain),
-            const SizedBox(height: 10),
-            _WideButton(label: 'Home', filled: false, onTap: widget.onHome),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _WideButton extends StatelessWidget {
-  const _WideButton({required this.label, required this.filled, required this.onTap});
-  final String label;
-  final bool filled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 48,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: filled
-              ? const LinearGradient(
-                  colors: [Color(0xFF6BF0BD), AppColors.mintDeep])
-              : null,
-          border: filled ? null : Border.all(color: AppColors.cardBorder, width: 1.5),
-        ),
-        child: Text(
-          label,
-          style: AppText.title.copyWith(
-              fontSize: 17, color: filled ? AppColors.ink : AppColors.cream),
-        ),
-      ),
-    );
-  }
-}
-
-class _ConfettiPainter extends CustomPainter {
-  _ConfettiPainter(this.t) : super(repaint: t);
-  final Animation<double> t;
-
-  static final _bits = () {
-    final r = math.Random(7);
-    return [
-      for (var i = 0; i < 90; i++)
-        (
-          x: r.nextDouble(),
-          phase: r.nextDouble(),
-          speed: .6 + r.nextDouble() * .8,
-          sway: r.nextDouble() * 2 * math.pi,
-          size: 5 + r.nextDouble() * 6,
-          color: [...playerColors, AppColors.mint, Colors.white][r.nextInt(6)],
-        ),
-    ];
-  }();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint();
-    for (final b in _bits) {
-      final fall = (t.value * b.speed + b.phase) % 1;
-      final x = b.x * size.width +
-          math.sin(fall * 6 + b.sway) * 18;
-      final y = fall * (size.height + 40) - 20;
-      canvas.save();
-      canvas.translate(x, y);
-      canvas.rotate(fall * 12 + b.sway);
-      canvas.drawRect(
-        Rect.fromCenter(center: Offset.zero, width: b.size, height: b.size * .55),
-        paint..color = b.color,
-      );
-      canvas.restore();
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ConfettiPainter old) => false;
 }
