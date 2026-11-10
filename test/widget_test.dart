@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:elite_play_ludo/main.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Future<void> _loadFonts() async {
@@ -26,14 +26,29 @@ void main() {
     await tester.pump();
 
     expect(find.text('LUDO'), findsWidgets);
-    expect(find.text('Tournament'), findsOneWidget);
-    expect(find.text('Play\nOnline'), findsOneWidget);
+    expect(find.text('OUR GAMES'), findsOneWidget);
+    expect(find.text('SNAKE'), findsOneWidget);
+    expect(find.text('ALL FEATURES'), findsOneWidget);
+    expect(find.textContaining('Wallet'), findsNothing);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('Friends'));
+    // The rest of the features sit behind one button.
+    await tester.ensureVisible(find.text('ALL FEATURES'));
+    await tester.pump();
+    await tester.tap(find.text('ALL FEATURES'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('All features'), findsOneWidget);
+    expect(find.text('LEADERBOARD'), findsOneWidget);
+    expect(find.text('LIVE\nSUPPORT'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    await tester.tap(find.text('Games'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Coming soon'), findsOneWidget);
-    expect(find.text('LUDO'), findsNothing);
+    expect(find.text('OUR GAMES'), findsNothing);
 
     // Tear down so the live demo board's timers end with its controller.
     await tester.pumpWidget(const SizedBox());

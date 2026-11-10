@@ -28,7 +28,10 @@ void main() {
     await tester.pumpWidget(const ElitePlayLudoApp());
     await tester.pump();
 
-    await tester.tap(find.text('Pass &\nPlay'));
+    await tester.tap(find.text('PLAY NOW'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.text('Pass & Play'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     await tester.tap(find.text('2 Players'));

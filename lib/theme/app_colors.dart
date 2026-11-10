@@ -2,14 +2,25 @@ import 'package:flutter/material.dart';
 
 /// Central colour palette for the Elite Play BD Ludo look.
 abstract final class AppColors {
-  static const bgTop = Color(0xFF1C2052);
-  static const bgBottom = Color(0xFF12143A);
+  static const bgTop = Color(0xFF0B1235);
+  static const bgBottom = Color(0xFF050818);
   static const glow = Color(0xFF3B43B8);
 
-  static const cardTop = Color(0xFF2D3270);
-  static const cardBottom = Color(0xFF212556);
-  static const cardBorder = Color(0xFF424890);
-  static const cardInset = Color(0xFF171A45);
+  static const cardTop = Color(0xFF151F52);
+  static const cardBottom = Color(0xFF0B1132);
+  static const cardBorder = Color(0xFF2A3A85);
+  static const cardInset = Color(0xFF060A20);
+
+  // Brand accents: royal blue for actions, soft gold for trim and titles.
+  static const royal = Color(0xFF3A66F5);
+  static const royalDeep = Color(0xFF1B3BB5);
+  static const goldSoft = Color(0xFFEBCB7A);
+  static const goldTrim = Color(0xFFC9A24B);
+  static const goldGradient = [
+    Color(0xFFFFF1B8),
+    Color(0xFFEBCB7A),
+    Color(0xFFB8862B),
+  ];
 
   static const mint = Color(0xFF45E3A6);
   static const mintDeep = Color(0xFF1FBF86);
