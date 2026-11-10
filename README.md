@@ -8,6 +8,18 @@ Flutter home page for the Elite Play BD Ludo app.
 - The page is laid out on a 390pt design canvas and scaled to the device width.
 - Static art sits behind `RepaintBoundary`, so the idle board animation only moves a cached layer.
 
+## Play
+
+- **Pass & Play** — 2 to 4 players on one phone.
+- **Play vs Computer** — you against 1 to 3 bots.
+
+Rules: roll a 6 to leave the yard; a 6, a capture or reaching home earns
+another roll; three 6s in a row lose the turn; start cells and star cells are
+safe; an exact roll is needed to get home. First player with all four pieces
+home wins.
+
+Play Online, Play with Friends and Tournament are not built yet.
+
 ## Run
 
 ```

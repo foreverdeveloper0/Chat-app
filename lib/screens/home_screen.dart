@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../widgets/game_setup_sheet.dart';
 import '../widgets/home_sections.dart';
 
 /// Everything is laid out on a 390pt-wide design canvas and scaled to the
@@ -19,6 +20,17 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
+
+  void _onTap(String label) {
+    switch (label) {
+      case 'Pass & Play':
+        showGameSetup(context, vsComputer: false);
+      case 'Play vs Computer':
+        showGameSetup(context, vsComputer: true);
+      default:
+        _comingSoon(label);
+    }
+  }
 
   void _comingSoon(String label) {
     ScaffoldMessenger.of(context)
@@ -68,7 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: _Scaled(
                                   child: _HomeBody(
                                     minHeight: math.max(0, bodyHeight),
-                                    onTap: _comingSoon,
+                                    onTap: _onTap,
                                   ),
                                 ),
                               )
