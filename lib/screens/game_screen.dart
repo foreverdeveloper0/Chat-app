@@ -389,7 +389,9 @@ class _Board extends StatelessWidget {
       return a.$2.dy.compareTo(b.$2.dy);
     });
 
-    // One spinning ring per square that holds a movable pawn.
+    // One spinning ring per square that holds a movable pawn. It lies on the
+    // board around the pawn's base, so it is centred on the base and is a
+    // touch wider than it.
     final rings = <Offset, (Offset, double, Color)>{};
     for (final (t, pos, scale) in placed) {
       if (!game.movable.contains(t)) continue;
@@ -399,15 +401,14 @@ class _Board extends StatelessWidget {
         base,
         () => crowded
             ? (
-                Offset(rim + base.dx * cell, rim + (base.dy + .02) * cell),
-                cell * .56,
+                Offset(rim + base.dx * cell, rim + (base.dy + .12) * cell),
+                cell * .6,
                 playerDeep[t.player],
               )
             : (
-                // Centred on the pawn's base, a touch wider than it.
                 Offset(rim + pos.dx * cell,
-                    rim + (pos.dy + .16 - .22 * scale) * cell),
-                cell * .86 * scale * .62,
+                    rim + (pos.dy + .16 - .077 * scale) * cell),
+                cell * .86 * scale * .64,
                 playerDeep[t.player],
               ),
       );
@@ -477,7 +478,6 @@ class _Board extends StatelessWidget {
                 scale: scale,
                 order: game.seats.indexOf(t.player) * 4 + t.index,
                 intro: intro,
-                spin: spin,
                 movable: game.movable.contains(t),
                 onTap: choosing && game.movable.contains(t)
                     ? () => game.move(t)
@@ -498,7 +498,6 @@ class _TokenView extends StatefulWidget {
     required this.scale,
     required this.order,
     required this.intro,
-    required this.spin,
     required this.movable,
     required this.onTap,
   });
@@ -508,7 +507,6 @@ class _TokenView extends StatefulWidget {
   final double scale;
   final int order;
   final Animation<double> intro;
-  final Animation<double> spin;
   final bool movable;
   final VoidCallback? onTap;
 
@@ -541,7 +539,7 @@ class _TokenViewState extends State<_TokenView>
   Widget build(BuildContext context) {
     final view = AnimatedBuilder(
       animation: Listenable.merge(
-          [_hop, widget.intro, if (widget.movable) widget.spin]),
+          [_hop, widget.intro]),
       builder: (_, _) {
         final hop = math.sin(_hop.value * math.pi);
         // Pawns drop into the yards one after another once the board is in.
@@ -549,15 +547,10 @@ class _TokenViewState extends State<_TokenView>
                 widget.order * .08)
             .clamp(0.0, 1.0);
         final landed = Curves.easeOutBack.transform(drop);
-        final bob = widget.movable
-            ? (math.sin(widget.spin.value * 4 * math.pi) * .5 + .5) *
-                widget.cell *
-                .12
-            : 0.0;
         return LayoutBuilder(builder: (_, box) {
           final foot = Offset(box.maxWidth / 2, box.maxHeight * .72);
           final lift =
-              hop * widget.cell * .5 + bob + (1 - landed) * widget.cell * 2.2;
+              hop * widget.cell * .5 + (1 - landed) * widget.cell * 2.2;
           final pw = widget.cell * .86 * widget.scale * (1 + hop * .12);
           final ph = pw / pawnAspect;
           return Opacity(
@@ -607,36 +600,45 @@ class _TokenViewState extends State<_TokenView>
 }
 
 /// Dashed rings that spin (without resizing) under pawns that can move.
+/// Each ring is flattened to the same viewing angle as the pawn artwork, so
+/// it reads as lying on the board around the pawn's base.
 class _RingsPainter extends CustomPainter {
   _RingsPainter(this.rings, this.cell, this.spin) : super(repaint: spin);
   final List<(Offset, double, Color)> rings;
   final double cell;
   final Animation<double> spin;
 
+  /// Height / width of the pawn image's round base as drawn.
+  static const tilt = .4;
+
   @override
   void paint(Canvas canvas, Size size) {
     const dashes = 10;
     const step = 2 * math.pi / dashes;
+    final start = spin.value * 2 * math.pi;
     for (final (centre, radius, color) in rings) {
-      final rect = Rect.fromCircle(center: centre, radius: radius);
-      canvas.drawCircle(
-          centre, radius, Paint()..color = Colors.white.withValues(alpha: .35));
+      canvas.save();
+      canvas.translate(centre.dx, centre.dy);
+      canvas.scale(1, tilt);
+      final rect = Rect.fromCircle(center: Offset.zero, radius: radius);
+      canvas.drawCircle(Offset.zero, radius,
+          Paint()..color = Colors.white.withValues(alpha: .4));
       final under = Paint()
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
-        ..strokeWidth = cell * .15
+        ..strokeWidth = cell * .2
         ..color = Colors.white;
       final over = Paint()
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
-        ..strokeWidth = cell * .085
+        ..strokeWidth = cell * .12
         ..color = color;
-      final start = spin.value * 2 * math.pi;
       for (final paint in [under, over]) {
         for (var i = 0; i < dashes; i++) {
           canvas.drawArc(rect, start + i * step, step * .52, false, paint);
         }
       }
+      canvas.restore();
     }
   }
 
