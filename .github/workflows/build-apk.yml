@@ -36,6 +36,10 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           ks="$RUNNER_TEMP/release.keystore"
+          # The password and alias have no spaces; drop any pasted whitespace.
+          KEYSTORE_PW=$(printf '%s' "$KEYSTORE_PW" | tr -d ' \t\r\n')
+          KEY_ALIAS=$(printf '%s' "$KEY_ALIAS" | tr -d ' \t\r\n')
+          echo "Password length: ${#KEYSTORE_PW} (expected 24). Alias length: ${#KEY_ALIAS} (expected 4)."
           if [ -z "$KEYSTORE_B64" ]; then
             echo "::warning::ANDROID_KEYSTORE_BASE64 is not set: using the debug key, so builds cannot update each other."
           else
