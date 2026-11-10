@@ -202,21 +202,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       },
       child: Scaffold(
         backgroundColor: AppColors.bgBottom,
-        body: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              center: Alignment(0, -.1),
-              radius: 1.1,
-              colors: [Color(0xFF232A6B), AppColors.bgBottom],
-            ),
-          ),
+        body: LudoBackdrop(
           child: SafeArea(
             child: ListenableBuilder(
               listenable: _game,
               builder: (context, _) => LayoutBuilder(
                 builder: (context, box) {
                   final board = math.min(
-                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 318);
+                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 378);
                   return Stack(
                     children: [
                       Column(
@@ -693,6 +686,8 @@ class _YardPadsPainter extends CustomPainter {
 
 // ───────────────────────── Player panel ─────────────────────────
 
+/// A player's card: picture with the name plate under it on the outer
+/// side, and the dice tray with the lives under it on the board side.
 class PlayerPanel extends StatelessWidget {
   const PlayerPanel({
     super.key,
@@ -705,7 +700,7 @@ class PlayerPanel extends StatelessWidget {
     required this.bubble,
   });
 
-  static const height = 68.0;
+  static const height = 98.0;
 
   final int player;
   final String name;
@@ -724,86 +719,101 @@ class PlayerPanel extends StatelessWidget {
     final canRoll =
         active && game.phase == Phase.awaitingRoll && !game.isBot(player);
     final color = playerColors[player];
+    final deep = playerDeep[player];
     final lives = game.lives[player] ?? 0;
 
-    final info = Column(
-      key: const ValueKey('info'),
+    // Picture, with the name on a plate in the player's colour beneath it.
+    final who = Column(
       mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment:
-          mirrored ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(shortName(name),
-              maxLines: 1, style: AppText.title.copyWith(fontSize: 14.5)),
+        PlayerAvatar(
+          player: player,
+          isBot: game.isBot(player),
+          isYou: isYou,
+          rank: rank,
+          // The ring drains while a human is on the clock.
+          timer: active && game.timerRunning
+              ? (game.turnSerial, game.turnSeconds)
+              : null,
         ),
         const SizedBox(height: 5),
-        if (gone)
-          FittedBox(
+        Container(
+          width: 70,
+          height: 20,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            gradient: LinearGradient(colors: [color, deep]),
+            border: Border.all(color: const Color(0x66FFFFFF), width: 1),
+          ),
+          child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text('Left the game',
-                maxLines: 1,
-                style: AppText.title.copyWith(
-                    fontSize: 10.5, color: const Color(0xFFFF8A80))),
-          )
-        else if (rank > 0)
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text('${ordinal(rank)} place',
-                maxLines: 1,
-                style: AppText.title
-                    .copyWith(fontSize: 11.5, color: rankColor(rank))),
-          )
-        else
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (var i = 0; i < LudoController.maxLives; i++)
-                  Icon(Icons.favorite_rounded,
-                      size: 11,
-                      color: i < lives
-                          ? const Color(0xFFFF4D67)
-                          : const Color(0xFF3A3F7A)),
-              ],
+            child: Text(
+              shortName(name),
+              maxLines: 1,
+              style: AppText.title.copyWith(
+                fontSize: 12.5,
+                color: Colors.white,
+                height: 1.1,
+                shadows: const [Shadow(color: Color(0x88000000), blurRadius: 2)],
+              ),
             ),
           ),
+        ),
       ],
     );
 
-    final children = [
-      PlayerAvatar(
-        player: player,
-        isBot: game.isBot(player),
-        isYou: isYou,
-        rank: rank,
-        // The ring drains while a human is on the clock.
-        timer: active && game.timerRunning
-            ? (game.turnSerial, game.turnSeconds)
-            : null,
-      ),
-      const SizedBox(width: 7),
-      Expanded(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 180),
-          child: bubble == null
-              ? Align(
-                  alignment:
-                      mirrored ? Alignment.centerRight : Alignment.centerLeft,
-                  child: info)
-              : ChatBubble(key: ValueKey(bubble), text: bubble!),
+    // Dice tray, with the lives (or the result) beneath it.
+    final Widget under;
+    if (gone) {
+      under = Text('LEFT',
+          style: AppText.title.copyWith(
+              fontSize: 11, letterSpacing: 1, color: const Color(0xFFFF8A80)));
+    } else if (rank > 0) {
+      under = Text('${ordinal(rank)} place',
+          style: AppText.title.copyWith(fontSize: 11, color: rankColor(rank)));
+    } else {
+      under = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < LudoController.maxLives; i++)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: .6),
+              child: Icon(Icons.favorite_rounded,
+                  size: 10.5,
+                  color: i < lives
+                      ? const Color(0xFFFF4D67)
+                      : const Color(0xFF3A3F7A)),
+            ),
+        ],
+      );
+    }
+    final play = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        DiceSocket(
+          active: active,
+          child: active
+              ? _Dice(game: game, canRoll: canRoll, pulse: pulse, color: color)
+              : null,
         ),
-      ),
-      const SizedBox(width: 6),
-      DiceSocket(
-        active: active,
-        child: active
-            ? _Dice(game: game, canRoll: canRoll, pulse: pulse, color: color)
-            : null,
-      ),
-    ];
+        const SizedBox(height: 5),
+        Container(
+          width: 70,
+          height: 20,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xCC0F1136),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.cardBorder, width: 1),
+          ),
+          child: FittedBox(fit: BoxFit.scaleDown, child: under),
+        ),
+      ],
+    );
 
+    final outer = mirrored ? Alignment.centerRight : Alignment.centerLeft;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: canRoll
@@ -814,41 +824,147 @@ class PlayerPanel extends StatelessWidget {
           : null,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 250),
-        opacity: gone ? .5 : 1,
+        opacity: gone ? .55 : 1,
         child: AnimatedContainer(
           key: ValueKey('panel-$player'),
           duration: const Duration(milliseconds: 250),
           height: height,
-          padding: const EdgeInsets.symmetric(horizontal: 7),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color.lerp(AppColors.cardTop, color, active ? .22 : .08)!,
-                AppColors.cardBottom,
-              ],
-            ),
+            borderRadius: BorderRadius.circular(22),
             border: Border.all(
               color: active ? color : AppColors.cardBorder,
-              width: active ? 2 : 1.2,
+              width: active ? 2.2 : 1.2,
             ),
             boxShadow: [
               if (active)
-                BoxShadow(color: color.withValues(alpha: .5), blurRadius: 16)
+                BoxShadow(color: color.withValues(alpha: .55), blurRadius: 18)
               else
                 const BoxShadow(
-                    color: Color(0x40060720),
-                    blurRadius: 8,
-                    offset: Offset(0, 4)),
+                    color: Color(0x55060720),
+                    blurRadius: 10,
+                    offset: Offset(0, 5)),
             ],
           ),
-          child: Row(children: mirrored ? children.reversed.toList() : children),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Stack(
+              children: [
+                // Glassy body with the player's colour sweeping in from
+                // their side as a slanted band.
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _PanelPainter(
+                        color: color, deep: deep, mirrored: mirrored, lit: active),
+                  ),
+                ),
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: mirrored ? [play, who] : [who, play],
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      child: bubble == null
+                          ? const SizedBox.shrink()
+                          : Align(
+                              key: ValueKey(bubble),
+                              alignment: outer,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(6, 0, 6, 34),
+                                child: SizedBox(
+                                    width: 76,
+                                    height: 40,
+                                    child: ChatBubble(text: bubble!)),
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
+}
+
+class _PanelPainter extends CustomPainter {
+  const _PanelPainter({
+    required this.color,
+    required this.deep,
+    required this.mirrored,
+    required this.lit,
+  });
+  final Color color;
+  final Color deep;
+  final bool mirrored;
+  final bool lit;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    if (mirrored) {
+      canvas.translate(size.width, 0);
+      canvas.scale(-1, 1);
+    }
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF2B3074), Color(0xFF171A47)],
+        ).createShader(rect),
+    );
+    // Slanted colour band behind the picture.
+    final w = size.width, h = size.height;
+    final band = Path()
+      ..moveTo(0, 0)
+      ..lineTo(w * .56, 0)
+      ..lineTo(w * .4, h)
+      ..lineTo(0, h)
+      ..close();
+    canvas.drawPath(
+      band,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withValues(alpha: lit ? .62 : .4),
+            deep.withValues(alpha: lit ? .5 : .28),
+          ],
+        ).createShader(rect),
+    );
+    // Thin highlight along the slant, and a second fainter stripe.
+    final edge = Paint()
+      ..strokeWidth = 1.6
+      ..color = Colors.white.withValues(alpha: lit ? .5 : .22);
+    canvas.drawLine(Offset(w * .56, 0), Offset(w * .4, h), edge);
+    canvas.drawLine(Offset(w * .63, 0), Offset(w * .47, h),
+        edge..color = color.withValues(alpha: lit ? .7 : .35));
+    // Glass sheen on the top half.
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, w, h * .45),
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x22FFFFFF), Color(0x00FFFFFF)],
+        ).createShader(Rect.fromLTWH(0, 0, w, h * .45)),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PanelPainter old) =>
+      old.lit != lit || old.color != color || old.mirrored != mirrored;
 }
 
 /// The dice is tossed a little way up out of its socket, tumbles as a real

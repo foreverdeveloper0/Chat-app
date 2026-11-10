@@ -19,6 +19,161 @@ Color rankColor(int rank) => switch (rank) {
       _ => const Color(0xFFA9AEDC),
     };
 
+// ───────────────────────── Page backdrop ─────────────────────────
+
+/// Full-page table background in the board's own language: a glow in each
+/// corner in that seat's colour, a faint tilted grid of squares, and ghosted
+/// stars, pawns and dice.
+class LudoBackdrop extends StatelessWidget {
+  const LudoBackdrop({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        const Positioned.fill(
+          child: RepaintBoundary(child: CustomPaint(painter: _BackdropPainter())),
+        ),
+        Positioned.fill(child: child),
+      ],
+    );
+  }
+}
+
+class _BackdropPainter extends CustomPainter {
+  const _BackdropPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final w = size.width, h = size.height;
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF1B1F58), Color(0xFF0E1034), Color(0xFF151848)],
+        ).createShader(rect),
+    );
+
+    // Seat-coloured corner glows: red, green, blue, yellow like the board.
+    const corners = [
+      (Alignment.topLeft, 0),
+      (Alignment.topRight, 1),
+      (Alignment.bottomRight, 2),
+      (Alignment.bottomLeft, 3),
+    ];
+    for (final (at, p) in corners) {
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..shader = RadialGradient(
+            center: at,
+            radius: .75,
+            colors: [
+              playerColors[p].withValues(alpha: .34),
+              playerColors[p].withValues(alpha: 0),
+            ],
+          ).createShader(rect),
+      );
+    }
+
+    // Tilted grid of board squares.
+    canvas.save();
+    canvas.translate(w / 2, h / 2);
+    canvas.rotate(-.21);
+    final cell = w / 7.5;
+    final line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..color = const Color(0x12FFFFFF);
+    final span = (w + h) * .75;
+    for (var x = -span; x <= span; x += cell) {
+      canvas.drawLine(Offset(x, -span), Offset(x, span), line);
+      canvas.drawLine(Offset(-span, x), Offset(span, x), line);
+    }
+    // A few filled squares, like home-lane cells.
+    const lanes = [(-3, -5, 0), (2, -6, 1), (3, 5, 2), (-4, 4, 3), (-2, -6, 0),
+      (3, -5, 1), (2, 6, 2), (-3, 5, 3)];
+    for (final (cx, cy, p) in lanes) {
+      canvas.drawRect(
+        Rect.fromLTWH(cx * cell, cy * cell, cell, cell),
+        Paint()..color = playerColors[p].withValues(alpha: .1),
+      );
+    }
+    canvas.restore();
+
+    // Ghosted stars, pawns and dice.
+    final ghost = Paint()..color = const Color(0x12FFFFFF);
+    void pawn(Offset c, double s, double a) {
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.rotate(a);
+      canvas.drawCircle(Offset(0, -s * .62), s * .3, ghost);
+      canvas.drawPath(
+        Path()
+          ..moveTo(-s * .12, -s * .4)
+          ..lineTo(s * .12, -s * .4)
+          ..lineTo(s * .4, s * .3)
+          ..lineTo(-s * .4, s * .3)
+          ..close(),
+        ghost,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            Rect.fromLTWH(-s * .5, s * .26, s, s * .2), Radius.circular(s * .1)),
+        ghost,
+      );
+      canvas.restore();
+    }
+
+    void dice(Offset c, double s, double a) {
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.rotate(a);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            Rect.fromCenter(center: Offset.zero, width: s, height: s),
+            Radius.circular(s * .22)),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = s * .08
+          ..color = const Color(0x16FFFFFF),
+      );
+      for (final d in const [Offset(-.25, -.25), Offset(.25, .25), Offset.zero]) {
+        canvas.drawCircle(d * s, s * .075, ghost);
+      }
+      canvas.restore();
+    }
+
+    canvas.drawPath(starPath(Offset(w * .5, h * .16), w * .06), ghost);
+    canvas.drawPath(starPath(Offset(w * .12, h * .92), w * .045), ghost);
+    canvas.drawPath(starPath(Offset(w * .9, h * .9), w * .05), ghost);
+    pawn(Offset(w * .2, h * .2), w * .11, -.3);
+    pawn(Offset(w * .82, h * .18), w * .1, .25);
+    pawn(Offset(w * .5, h * .91), w * .09, .1);
+    dice(Offset(w * .34, h * .12), w * .1, .4);
+    dice(Offset(w * .68, h * .13), w * .085, -.3);
+    dice(Offset(w * .26, h * .93), w * .08, -.2);
+    dice(Offset(w * .74, h * .94), w * .09, .35);
+
+    // Darken the middle a touch so the board stands out.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const RadialGradient(
+          radius: .7,
+          colors: [Color(0x55080920), Color(0x00080920)],
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BackdropPainter old) => false;
+}
+
 // ───────────────────────── Header ─────────────────────────
 
 /// Back button, prize pool with room details, and the sound toggle.
@@ -298,16 +453,16 @@ class PlayerAvatar extends StatelessWidget {
   /// (serial, seconds) while the turn timer runs.
   final (int, int)? timer;
 
-  static const size = 42.0;
+  static const size = 48.0;
 
   @override
   Widget build(BuildContext context) {
     final color = playerColors[player];
     final Widget picture = isYou
-        ? const Art(ArtKind.avatar, size: 34)
+        ? const Art(ArtKind.avatar, size: 40)
         : isBot
-            ? const Art(ArtKind.robot, size: 27)
-            : Image.asset(pawnAssets[player], width: 22, height: 30);
+            ? const Art(ArtKind.robot, size: 31)
+            : Image.asset(pawnAssets[player], width: 25, height: 34);
     Widget ring(double value, Color c) => CustomPaint(
           size: const Size.square(size),
           painter: _RingPainter(value, c),
@@ -319,8 +474,8 @@ class PlayerAvatar extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           Container(
-            width: 34,
-            height: 34,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(colors: [
