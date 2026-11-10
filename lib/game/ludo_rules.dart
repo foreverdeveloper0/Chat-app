@@ -46,10 +46,10 @@ abstract final class LudoRules {
 
   /// Token resting spots inside a 6x6 yard, in cell units.
   static const yardSlots = [
-    Offset(3, 1.95),
-    Offset(1.75, 3),
-    Offset(4.2, 3),
-    Offset(3, 4.26),
+    Offset(3, 1.85),
+    Offset(1.8, 3.05),
+    Offset(4.2, 3.05),
+    Offset(3, 4.25),
   ];
 
   static const _homeSpots = [

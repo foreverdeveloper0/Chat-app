@@ -271,7 +271,7 @@ class _Board extends StatelessWidget {
     final placed = <(Token, Offset, double)>[];
     for (final t in all) {
       var pos = LudoRules.position(t.player, t.index, t.progress);
-      var scale = t.inYard ? 1.22 : (t.isHome ? .68 : 1.0);
+      var scale = t.inYard ? 1.12 : (t.isHome ? .68 : .92);
       final group = groups[pos];
       if (group != null && group.length > 1) {
         final i = group.indexOf(t), n = group.length;
@@ -307,6 +307,14 @@ class _Board extends StatelessWidget {
           Positioned.fill(
             child: Image.asset(boardAsset,
                 fit: BoxFit.fill, filterQuality: FilterQuality.medium),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _YardPadsPainter(
+                    seats: game.seats, rim: rim, cell: cell),
+              ),
+            ),
           ),
           if (game.phase != Phase.gameOver)
             AnimatedPositioned(
@@ -444,6 +452,56 @@ class _TokenViewState extends State<_TokenView>
       child: RepaintBoundary(child: view),
     );
   }
+}
+
+/// Soft coloured pads in each yard diamond marking where a pawn rests.
+class _YardPadsPainter extends CustomPainter {
+  const _YardPadsPainter({
+    required this.seats,
+    required this.rim,
+    required this.cell,
+  });
+  final List<int> seats;
+  final double rim;
+  final double cell;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (var p = 0; p < 4; p++) {
+      final o = LudoRules.yardOrigins[p];
+      final origin = Offset(rim + o.$1 * cell, rim + o.$2 * cell);
+      for (final slot in LudoRules.yardSlots) {
+        final c = origin + slot * cell + Offset(0, cell * .06);
+        final pad = Rect.fromCenter(
+            center: c, width: cell * 1.25, height: cell * .78);
+        canvas.drawOval(
+          pad.shift(Offset(0, cell * .05)),
+          Paint()..color = playerDeep[p].withValues(alpha: .22),
+        );
+        canvas.drawOval(
+          pad,
+          Paint()
+            ..shader = RadialGradient(
+              colors: [
+                playerLight[p].withValues(alpha: .55),
+                playerColors[p].withValues(alpha: .28),
+              ],
+            ).createShader(pad),
+        );
+        canvas.drawOval(
+          pad,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = cell * .06
+            ..color = playerColors[p].withValues(alpha: .75),
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_YardPadsPainter old) =>
+      old.cell != cell || old.rim != rim;
 }
 
 /// Ground shadow and the pulsing "you can move me" ring under a pawn.
