@@ -203,8 +203,7 @@ class GameHeader extends StatelessWidget {
                   children: [
                     stat('PRIZE', formatCoins(prize),
                         color: const Color(0xFFFFE28A),
-                        lead: const CustomPaint(
-                            size: Size.square(17), painter: CoinPainter())),
+                        lead: const Art(ArtKind.coin, size: 17)),
                     divider,
                     stat('ROOM', roomId),
                     divider,

@@ -4,7 +4,7 @@ Flutter home page for the Elite Play BD Ludo app.
 
 <img src="docs/home.png" width="320" alt="Home page">
 
-- The game board and pawns use the supplied PNG artwork (`assets/images`). The home page, icons and dice are drawn in code with `CustomPainter`.
+- The board, pawns, match background and icons (`assets/images`) are supplied artwork. The dice, player docks and effects are drawn in code.
 - The page is laid out on a 390pt design canvas and scaled to the device width.
 - Static art sits behind `RepaintBoundary`, so the idle board animation only moves a cached layer.
 

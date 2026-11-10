@@ -69,13 +69,13 @@ class _Wallet extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const CustomPaint(size: Size.square(28), painter: CoinPainter()),
+          const Art(ArtKind.coin, size: 28),
           const SizedBox(width: 7),
           Text('1,250', style: num),
           const SizedBox(width: 10),
           Container(width: 1, height: 16, color: AppColors.cardBorder),
           const SizedBox(width: 10),
-          const CustomPaint(size: Size(22, 20), painter: GemPainter()),
+          const Art(ArtKind.gem, size: 23),
           const SizedBox(width: 7),
           Text('80', style: num),
         ],
