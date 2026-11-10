@@ -209,7 +209,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               builder: (context, _) => LayoutBuilder(
                 builder: (context, box) {
                   final board = math.min(
-                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 378);
+                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 350);
                   return Stack(
                     children: [
                       Column(
@@ -272,23 +272,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   Widget _panelRow(double width, int left, int right) {
-    Widget panel(int p, bool mirrored) => Expanded(
-          child: widget.seats.contains(p)
-              ? PlayerPanel(
-                  player: p,
-                  name: widget.names[p] ?? 'Player',
-                  isYou: widget.names[p] == 'You',
-                  game: _game,
-                  pulse: _pulse,
-                  mirrored: mirrored,
-                  bubble: _bubbles[p],
-                )
-              : const SizedBox(height: PlayerPanel.height),
-        );
+    Widget panel(int p, bool mirrored) => widget.seats.contains(p)
+        ? PlayerPanel(
+            player: p,
+            name: widget.names[p] ?? 'Player',
+            isYou: widget.names[p] == 'You',
+            game: _game,
+            pulse: _pulse,
+            mirrored: mirrored,
+            bubble: _bubbles[p],
+          )
+        : const SizedBox(width: PlayerPanel.width, height: PlayerPanel.height);
     return SizedBox(
       width: width,
       child: Row(
-        children: [panel(left, false), const SizedBox(width: 8), panel(right, true)],
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [panel(left, false), panel(right, true)],
       ),
     );
   }
@@ -686,8 +685,9 @@ class _YardPadsPainter extends CustomPainter {
 
 // ───────────────────────── Player panel ─────────────────────────
 
-/// A player's card: picture with the name plate under it on the outer
-/// side, and the dice tray with the lives under it on the board side.
+/// A compact player dock that sits at a corner of the board: picture and
+/// dice tray side by side, the name under the picture and the lives under
+/// the tray, inside a thin metal frame that turns gold on the player's turn.
 class PlayerPanel extends StatelessWidget {
   const PlayerPanel({
     super.key,
@@ -700,7 +700,9 @@ class PlayerPanel extends StatelessWidget {
     required this.bubble,
   });
 
-  static const height = 98.0;
+  static const width = 128.0;
+  static const height = 84.0;
+  static const _slot = 52.0;
 
   final int player;
   final String name;
@@ -722,98 +724,99 @@ class PlayerPanel extends StatelessWidget {
     final deep = playerDeep[player];
     final lives = game.lives[player] ?? 0;
 
-    // Picture, with the name on a plate in the player's colour beneath it.
+    Widget plate({required Widget child, Gradient? gradient, Color? fill}) =>
+        Container(
+          width: _slot,
+          height: 16,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            gradient: gradient,
+            color: fill,
+            border: Border.all(color: const Color(0x55FFFFFF), width: .8),
+          ),
+          child: FittedBox(fit: BoxFit.scaleDown, child: child),
+        );
+
     final who = Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        PlayerAvatar(
-          player: player,
-          isBot: game.isBot(player),
-          isYou: isYou,
-          rank: rank,
-          // The ring drains while a human is on the clock.
-          timer: active && game.timerRunning
-              ? (game.turnSerial, game.turnSeconds)
-              : null,
-        ),
-        const SizedBox(height: 5),
-        Container(
-          width: 70,
-          height: 20,
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            gradient: LinearGradient(colors: [color, deep]),
-            border: Border.all(color: const Color(0x66FFFFFF), width: 1),
+        SizedBox(
+          width: _slot,
+          height: 50,
+          child: Center(
+            child: PlayerAvatar(
+              player: player,
+              isBot: game.isBot(player),
+              isYou: isYou,
+              rank: rank,
+              // The ring drains while a human is on the clock.
+              timer: active && game.timerRunning
+                  ? (game.turnSerial, game.turnSeconds)
+                  : null,
+            ),
           ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              shortName(name),
-              maxLines: 1,
-              style: AppText.title.copyWith(
-                fontSize: 12.5,
-                color: Colors.white,
-                height: 1.1,
-                shadows: const [Shadow(color: Color(0x88000000), blurRadius: 2)],
-              ),
+        ),
+        const SizedBox(height: 3),
+        plate(
+          gradient: LinearGradient(colors: [color, deep]),
+          child: Text(
+            shortName(name),
+            maxLines: 1,
+            style: AppText.title.copyWith(
+              fontSize: 11,
+              color: Colors.white,
+              height: 1.1,
+              shadows: const [Shadow(color: Color(0x88000000), blurRadius: 2)],
             ),
           ),
         ),
       ],
     );
 
-    // Dice tray, with the lives (or the result) beneath it.
     final Widget under;
     if (gone) {
       under = Text('LEFT',
           style: AppText.title.copyWith(
-              fontSize: 11, letterSpacing: 1, color: const Color(0xFFFF8A80)));
+              fontSize: 10, letterSpacing: 1, color: const Color(0xFFFF8A80)));
     } else if (rank > 0) {
       under = Text('${ordinal(rank)} place',
-          style: AppText.title.copyWith(fontSize: 11, color: rankColor(rank)));
+          style: AppText.title.copyWith(fontSize: 10, color: rankColor(rank)));
     } else {
       under = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           for (var i = 0; i < LudoController.maxLives; i++)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: .6),
-              child: Icon(Icons.favorite_rounded,
-                  size: 10.5,
-                  color: i < lives
-                      ? const Color(0xFFFF4D67)
-                      : const Color(0xFF3A3F7A)),
-            ),
+            Icon(Icons.favorite_rounded,
+                size: 8.6,
+                color: i < lives
+                    ? const Color(0xFFFF4D67)
+                    : const Color(0xFF3A3F7A)),
         ],
       );
     }
     final play = Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        DiceSocket(
-          active: active,
-          child: active
-              ? _Dice(game: game, canRoll: canRoll, pulse: pulse, color: color)
-              : null,
-        ),
-        const SizedBox(height: 5),
-        Container(
-          width: 70,
-          height: 20,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: const Color(0xCC0F1136),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.cardBorder, width: 1),
+        SizedBox(
+          width: _slot,
+          height: 50,
+          child: Center(
+            child: DiceSocket(
+              active: active,
+              child: active
+                  ? _Dice(
+                      game: game, canRoll: canRoll, pulse: pulse, color: color)
+                  : null,
+            ),
           ),
-          child: FittedBox(fit: BoxFit.scaleDown, child: under),
         ),
+        const SizedBox(height: 3),
+        plate(fill: const Color(0xD90F1136), child: under),
       ],
     );
 
-    final outer = mirrored ? Alignment.centerRight : Alignment.centerLeft;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: canRoll
@@ -828,29 +831,44 @@ class PlayerPanel extends StatelessWidget {
         child: AnimatedContainer(
           key: ValueKey('panel-$player'),
           duration: const Duration(milliseconds: 250),
+          width: width,
           height: height,
+          padding: const EdgeInsets.all(1.8),
+          // The frame itself: brushed steel at rest, gold on the turn.
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: active ? color : AppColors.cardBorder,
-              width: active ? 2.2 : 1.2,
+            borderRadius: BorderRadius.circular(18),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: active
+                  ? const [
+                      Color(0xFFFFF3B8),
+                      Color(0xFFE3B341),
+                      Color(0xFFFFE28A),
+                      Color(0xFF9C6B0E),
+                    ]
+                  : const [
+                      Color(0xFF7C83CC),
+                      Color(0xFF343A80),
+                      Color(0xFF5A61AE),
+                      Color(0xFF23275E),
+                    ],
             ),
             boxShadow: [
-              if (active)
-                BoxShadow(color: color.withValues(alpha: .55), blurRadius: 18)
-              else
+              if (active) ...[
+                BoxShadow(color: color.withValues(alpha: .7), blurRadius: 16),
+                const BoxShadow(color: Color(0x66FFC93A), blurRadius: 6),
+              ] else
                 const BoxShadow(
-                    color: Color(0x55060720),
-                    blurRadius: 10,
-                    offset: Offset(0, 5)),
+                    color: Color(0x66060720),
+                    blurRadius: 8,
+                    offset: Offset(0, 4)),
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16.2),
             child: Stack(
               children: [
-                // Glassy body with the player's colour sweeping in from
-                // their side as a slanted band.
                 Positioned.fill(
                   child: CustomPaint(
                     painter: _PanelPainter(
@@ -858,12 +876,9 @@ class PlayerPanel extends StatelessWidget {
                   ),
                 ),
                 Positioned.fill(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: mirrored ? [play, who] : [who, play],
-                    ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: mirrored ? [play, who] : [who, play],
                   ),
                 ),
                 Positioned.fill(
@@ -874,14 +889,11 @@ class PlayerPanel extends StatelessWidget {
                           ? const SizedBox.shrink()
                           : Align(
                               key: ValueKey(bubble),
-                              alignment: outer,
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(6, 0, 6, 34),
-                                child: SizedBox(
-                                    width: 76,
-                                    height: 40,
-                                    child: ChatBubble(text: bubble!)),
-                              ),
+                              alignment: const Alignment(0, -.55),
+                              child: SizedBox(
+                                  width: 100,
+                                  height: 38,
+                                  child: ChatBubble(text: bubble!)),
                             ),
                     ),
                   ),
@@ -927,8 +939,8 @@ class _PanelPainter extends CustomPainter {
     final w = size.width, h = size.height;
     final band = Path()
       ..moveTo(0, 0)
-      ..lineTo(w * .56, 0)
-      ..lineTo(w * .4, h)
+      ..lineTo(w * .58, 0)
+      ..lineTo(w * .42, h)
       ..lineTo(0, h)
       ..close();
     canvas.drawPath(
@@ -947,8 +959,8 @@ class _PanelPainter extends CustomPainter {
     final edge = Paint()
       ..strokeWidth = 1.6
       ..color = Colors.white.withValues(alpha: lit ? .5 : .22);
-    canvas.drawLine(Offset(w * .56, 0), Offset(w * .4, h), edge);
-    canvas.drawLine(Offset(w * .63, 0), Offset(w * .47, h),
+    canvas.drawLine(Offset(w * .58, 0), Offset(w * .42, h), edge);
+    canvas.drawLine(Offset(w * .64, 0), Offset(w * .48, h),
         edge..color = color.withValues(alpha: lit ? .7 : .35));
     // Glass sheen on the top half.
     canvas.drawRect(

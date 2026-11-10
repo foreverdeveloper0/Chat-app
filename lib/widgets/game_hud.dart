@@ -552,8 +552,8 @@ class DiceSocket extends StatelessWidget {
   final bool active;
   final Widget? child;
 
-  static const size = 52.0;
-  static const diceSize = 38.0;
+  static const size = 48.0;
+  static const diceSize = 35.0;
 
   @override
   Widget build(BuildContext context) {
@@ -563,7 +563,7 @@ class DiceSocket extends StatelessWidget {
       height: size,
       padding: const EdgeInsets.all(2.2),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -578,7 +578,7 @@ class DiceSocket extends StatelessWidget {
       ),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           gradient: const RadialGradient(
             radius: .9,
             colors: [Color(0xFF2A2F78), Color(0xFF0F1136)],
