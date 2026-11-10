@@ -32,14 +32,23 @@ jobs:
       - name: Prepare signing key
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
-            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
-            echo "ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
-            echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> "$GITHUB_ENV"
+          ks="$RUNNER_TEMP/release.keystore"
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set: using the debug key, so builds cannot update each other."
           else
-            echo "::warning::No signing key secret set: using the debug key, so builds cannot update each other."
+            # Tolerate stray spaces, line breaks and quotes from copy and paste.
+            printf '%s' "$KEYSTORE_B64" | tr -d ' \t\r\n"' | base64 -d > "$ks" 2>/dev/null || true
+            if keytool -list -keystore "$ks" -storepass "$KEYSTORE_PW" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
+              echo "ANDROID_KEYSTORE_PATH=$ks" >> "$GITHUB_ENV"
+              echo "ANDROID_KEYSTORE_PASSWORD=$KEYSTORE_PW" >> "$GITHUB_ENV"
+              echo "ANDROID_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+              echo "Signing key OK."
+            else
+              echo "::warning::The signing key secrets are set but not valid (check the copy and paste of ANDROID_KEYSTORE_BASE64, the password and the alias). Using the debug key."
+            fi
           fi
       - run: flutter build apk --release --build-number=${{ github.run_number }}
       - run: cp build/app/outputs/flutter-apk/app-release.apk elite-play-ludo-demo.apk
