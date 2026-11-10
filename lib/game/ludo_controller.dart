@@ -64,6 +64,10 @@ class LudoController extends ChangeNotifier {
   ];
   final lives = <int, int>{};
 
+  /// Opponent pieces each player has sent home, and pieces they have lost.
+  final captures = <int, int>{};
+  final lost = <int, int>{};
+
   /// Players who got all four pieces home, best first.
   final finished = <int>[];
 
@@ -288,6 +292,8 @@ class LudoController extends ChangeNotifier {
           if (other.onTrack && LudoRules.trackIndex(p, other.progress) == cell) {
             other.progress = LudoRules.yard;
             captured = true;
+            captures[token.player] = (captures[token.player] ?? 0) + 1;
+            lost[p] = (lost[p] ?? 0) + 1;
             onCapture?.call(token.player, p);
           }
         }

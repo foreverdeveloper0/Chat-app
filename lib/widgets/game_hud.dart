@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 import '../art/icons.dart';
 import '../art/pieces.dart';
 import '../game/coins.dart';
+import '../game/ludo_controller.dart';
 import '../game/sounds.dart';
 import '../theme/app_colors.dart';
 import '../theme/board_assets.dart';
-import 'game_card.dart';
 
 String ordinal(int n) => switch (n) { 1 => '1st', 2 => '2nd', 3 => '3rd', _ => '${n}th' };
 
@@ -176,103 +176,173 @@ class _BackdropPainter extends CustomPainter {
 
 // ───────────────────────── Header ─────────────────────────
 
-/// Back button, prize pool with room details, and the sound toggle.
+/// Round glass button used at the edges of the header and in the dock.
+class RoundButton extends StatelessWidget {
+  const RoundButton({
+    super.key,
+    required this.icon,
+    required this.onTap,
+    this.size = 44,
+    this.lit = false,
+  });
+  final IconData icon;
+  final VoidCallback onTap;
+  final double size;
+  final bool lit;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: lit
+                ? const [Color(0xFF7BF5C6), Color(0xFF14A873)]
+                : const [Color(0xFF4A50A6), Color(0xFF23275E)],
+          ),
+          border: Border.all(
+            color: lit ? const Color(0xFFD6FFF0) : const Color(0xFF7C83CC),
+            width: 1.4,
+          ),
+          boxShadow: [
+            if (lit) const BoxShadow(color: Color(0x9945E3A6), blurRadius: 14),
+            const BoxShadow(
+                color: Color(0x66060720), blurRadius: 8, offset: Offset(0, 4)),
+          ],
+        ),
+        child: Icon(icon,
+            size: size * .5, color: lit ? AppColors.ink : AppColors.cream),
+      ),
+    );
+  }
+}
+
+/// Top bar: back, a gold-trimmed plaque with prize / room / entry, sound.
 class GameHeader extends StatelessWidget {
   const GameHeader({
     super.key,
     required this.prize,
     required this.entry,
     required this.roomId,
-    required this.status,
     required this.onBack,
   });
   final int prize;
   final int entry;
   final String roomId;
-  final String status;
   final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
-    final small = AppText.title.copyWith(
-        fontSize: 11.5,
-        fontWeight: FontWeight.w500,
-        color: const Color(0xFFB9BEEA),
-        height: 1.2);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
+    Widget stat(String label, String value, {Color? color, Widget? lead}) =>
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              GameCard(
-                width: 44,
-                height: 44,
-                radius: 14,
-                onTap: onBack,
-                child:
-                    const Icon(Icons.arrow_back_rounded, color: AppColors.cream),
-              ),
-              Expanded(
-                child: Column(
+              Text(label,
+                  style: AppText.title.copyWith(
+                      fontSize: 9,
+                      letterSpacing: 1.4,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF9EA4DC))),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      height: 30,
-                      padding: const EdgeInsets.only(left: 3, right: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.cardInset,
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(
-                            color: const Color(0xFFE3B341), width: 1.2),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const CustomPaint(
-                              size: Size.square(24), painter: CoinPainter()),
-                          const SizedBox(width: 6),
-                          Text('Prize ${formatCoins(prize)}',
-                              style: AppText.title.copyWith(
-                                  fontSize: 15,
-                                  color: const Color(0xFFFFE28A))),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text('Room $roomId  •  Entry ${formatCoins(entry)}',
-                        style: small),
+                    if (lead != null) ...[lead, const SizedBox(width: 4)],
+                    Text(value,
+                        maxLines: 1,
+                        style: AppText.title.copyWith(
+                            fontSize: 15.5, color: color ?? AppColors.cream)),
                   ],
-                ),
-              ),
-              ValueListenableBuilder(
-                valueListenable: Sounds.muted,
-                builder: (_, muted, _) => GameCard(
-                  width: 44,
-                  height: 44,
-                  radius: 14,
-                  onTap: () => Sounds.muted.value = !muted,
-                  child: Icon(
-                    muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                    color: muted ? const Color(0xFFA9AEDC) : AppColors.cream,
-                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          SizedBox(
-            height: 18,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: Text(
-                status,
-                key: ValueKey(status),
-                maxLines: 1,
-                style: AppText.title
-                    .copyWith(fontSize: 13.5, color: AppColors.mint),
+        );
+    const divider = SizedBox(
+      width: 1,
+      height: 26,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0x00E3B341), Color(0xAAE3B341), Color(0x00E3B341)],
+          ),
+        ),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+      child: Row(
+        children: [
+          RoundButton(icon: Icons.arrow_back_rounded, onTap: onBack),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              height: 52,
+              padding: const EdgeInsets.all(1.6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(26),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFFFFF3B8),
+                    Color(0xFFE3B341),
+                    Color(0xFF8A5E0C),
+                    Color(0xFFFFE28A),
+                  ],
+                ),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x55FFC93A), blurRadius: 12),
+                  BoxShadow(
+                      color: Color(0x88060720),
+                      blurRadius: 10,
+                      offset: Offset(0, 5)),
+                ],
               ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24.4),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xFF2E3380), Color(0xFF12143F)],
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    stat('PRIZE', formatCoins(prize),
+                        color: const Color(0xFFFFE28A),
+                        lead: const CustomPaint(
+                            size: Size.square(17), painter: CoinPainter())),
+                    divider,
+                    stat('ROOM', roomId),
+                    divider,
+                    stat('ENTRY', formatCoins(entry)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          ValueListenableBuilder(
+            valueListenable: Sounds.muted,
+            builder: (_, muted, _) => RoundButton(
+              icon: muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+              onTap: () => Sounds.muted.value = !muted,
             ),
           ),
         ],
@@ -281,53 +351,84 @@ class GameHeader extends StatelessWidget {
   }
 }
 
-// ───────────────────────── Voice + chat bar ─────────────────────────
+// ───────────────────────── Voice + message dock ─────────────────────────
 
-class GameBottomBar extends StatelessWidget {
-  const GameBottomBar({
+const _quick = ['👍', '😂', '😡', '🔥'];
+
+/// Floating dock under the board: mic, one-tap reactions, messages.
+class GameDock extends StatelessWidget {
+  const GameDock({
     super.key,
     required this.micOn,
     required this.onMic,
     required this.onChat,
+    required this.onQuick,
   });
   final bool micOn;
   final VoidCallback onMic;
   final VoidCallback onChat;
+  final ValueChanged<String> onQuick;
 
   @override
   Widget build(BuildContext context) {
-    Widget button(IconData icon, String label, VoidCallback onTap, bool lit) =>
-        GameCard(
-          height: 44,
-          radius: 22,
-          onTap: onTap,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon,
-                  size: 21, color: lit ? AppColors.mint : AppColors.cream),
-              const SizedBox(width: 7),
-              Text(label,
-                  style: AppText.title.copyWith(
-                      fontSize: 14.5,
-                      color: lit ? AppColors.mint : AppColors.cream)),
-            ],
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xE62E3380), Color(0xE612143F)],
+        ),
+        border: Border.all(color: const Color(0xFF5A61AE), width: 1.3),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x99060720), blurRadius: 14, offset: Offset(0, 6)),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          RoundButton(
+            icon: micOn ? Icons.mic_rounded : Icons.mic_off_rounded,
+            onTap: onMic,
+            lit: micOn,
           ),
-        );
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        button(micOn ? Icons.mic_rounded : Icons.mic_off_rounded, 'Voice',
-            onMic, micOn),
-        const SizedBox(width: 12),
-        button(Icons.chat_bubble_rounded, 'Message', onChat, false),
-      ],
+          const SizedBox(width: 8),
+          Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F1136),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final e in _quick)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onQuick(e),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Text(e, style: const TextStyle(fontSize: 23)),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          RoundButton(icon: Icons.chat_bubble_rounded, onTap: onChat),
+        ],
+      ),
     );
   }
 }
 
-const _emojis = ['👍', '😂', '😎', '😡', '😭', '🔥', '🎉', '🙏'];
+const _emojis = [
+  '👍', '😂', '😎', '😡', '😭', '🔥', '🎉', '🙏', '😱', '🤝', '💪', '👏',
+];
 const _phrases = [
   'Hi!',
   'Good luck',
@@ -335,64 +436,317 @@ const _phrases = [
   'Oops!',
   'Hurry up',
   'Well played',
+  'Thank you',
+  'One more game?',
 ];
 
-/// Quick messages; returns the chosen text.
-Future<String?> showChatSheet(BuildContext context) {
-  return showModalBottomSheet<String>(
-    context: context,
-    backgroundColor: Colors.transparent,
-    builder: (sheet) => Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+Widget _sheetShell({required String title, required List<Widget> children}) =>
+    Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
       decoration: const BoxDecoration(
-        color: AppColors.bgTop,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border(top: BorderSide(color: AppColors.cardBorder, width: 1.5)),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF262B70), Color(0xFF12143F)],
+        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        border: Border(top: BorderSide(color: Color(0xFFE3B341), width: 1.6)),
       ),
       child: SafeArea(
         top: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Send a message', style: AppText.title.copyWith(fontSize: 20)),
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                for (final e in _emojis)
-                  GestureDetector(
-                    onTap: () => Navigator.pop(sheet, e),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Text(e, style: const TextStyle(fontSize: 28)),
-                    ),
-                  ),
-              ],
+            Container(
+              width: 44,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFF5A61AE),
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                for (final p in _phrases)
-                  GameCard(
-                    height: 40,
-                    radius: 20,
-                    onTap: () => Navigator.pop(sheet, p),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(p, style: AppText.title.copyWith(fontSize: 15)),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
+            Text(title, style: AppText.title.copyWith(fontSize: 21)),
+            const SizedBox(height: 14),
+            ...children,
           ],
         ),
       ),
+    );
+
+Widget _sectionLabel(String text) => Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4, bottom: 8),
+        child: Text(text,
+            style: AppText.title.copyWith(
+                fontSize: 11,
+                letterSpacing: 1.4,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF9EA4DC))),
+      ),
+    );
+
+/// Reactions and quick chat lines; returns the chosen text.
+Future<String?> showChatSheet(BuildContext context) {
+  return showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (sheet) => _sheetShell(
+      title: 'Messages',
+      children: [
+        _sectionLabel('REACTIONS'),
+        GridView.count(
+          crossAxisCount: 6,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          children: [
+            for (final e in _emojis)
+              GestureDetector(
+                onTap: () => Navigator.pop(sheet, e),
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF3A4096), Color(0xFF1B1E55)],
+                    ),
+                    border:
+                        Border.all(color: const Color(0xFF5A61AE), width: 1),
+                  ),
+                  child: Text(e, style: const TextStyle(fontSize: 25)),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _sectionLabel('QUICK CHAT'),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 4.2,
+          children: [
+            for (final p in _phrases)
+              GestureDetector(
+                onTap: () => Navigator.pop(sheet, p),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    // A speech-bubble corner.
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                      bottomLeft: Radius.circular(4),
+                    ),
+                    color: const Color(0xFF0F1136),
+                    border:
+                        Border.all(color: const Color(0xFF45E3A6), width: 1.1),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(p,
+                              style: AppText.title.copyWith(fontSize: 14.5)),
+                        ),
+                      ),
+                      const Icon(Icons.send_rounded,
+                          size: 15, color: AppColors.mint),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+// ───────────────────────── Player profile ─────────────────────────
+
+/// Demo player id: stable for a seat in a room. Real ids need accounts.
+String playerUid(String roomId, int player) {
+  final seed = (int.tryParse(roomId) ?? 0) * 31 + (player + 1) * 7919;
+  return 'EP${1000000 + seed % 9000000}';
+}
+
+/// Profile card with identity, live match stats and coins.
+Future<void> showPlayerProfile(
+  BuildContext context, {
+  required int player,
+  required String name,
+  required bool isYou,
+  required LudoController game,
+  required int entry,
+  required int prize,
+  required String roomId,
+}) {
+  final color = playerColors[player];
+  final isBot = game.isBot(player);
+  final tokens = game.tokens[player];
+  final home = game.homeCount(player);
+  final yard = tokens.where((t) => t.inYard).length;
+  final rank = game.rankOf(player);
+  final gone = game.left.contains(player);
+  final status = gone
+      ? 'Left the game'
+      : rank > 0
+          ? 'Finished ${ordinal(rank)}'
+          : (game.current == player ? 'Playing now' : 'Waiting');
+
+  Widget tile(String label, String value, {Color? valueColor, IconData? icon}) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: const Color(0xFF0F1136),
+          border: Border.all(color: const Color(0xFF3A4096), width: 1),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, size: 15, color: valueColor ?? AppColors.cream),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(value,
+                      maxLines: 1,
+                      style: AppText.title.copyWith(
+                          fontSize: 17, color: valueColor ?? AppColors.cream)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(label,
+                  maxLines: 1,
+                  style: AppText.title.copyWith(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF9EA4DC))),
+            ),
+          ],
+        ),
+      );
+
+  Widget grid(List<Widget> tiles) => GridView.count(
+        crossAxisCount: 3,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        childAspectRatio: 1.75,
+        children: tiles,
+      );
+
+  Widget info(IconData icon, String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: const Color(0xFF9EA4DC)),
+            const SizedBox(width: 8),
+            Text(label,
+                style: AppText.title.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF9EA4DC))),
+            const Spacer(),
+            Text(value, style: AppText.title.copyWith(fontSize: 14)),
+          ],
+        ),
+      );
+
+  const gold = Color(0xFFFFE28A);
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (sheet) => _sheetShell(
+      title: 'Player profile',
+      children: [
+        Row(
+          children: [
+            PlayerAvatar(
+              player: player,
+              isBot: isBot,
+              isYou: isYou,
+              rank: rank,
+              timer: null,
+              size: 76,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.title.copyWith(fontSize: 22)),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      gradient:
+                          LinearGradient(colors: [color, playerDeep[player]]),
+                    ),
+                    child: Text(
+                      isBot ? 'Computer player' : (isYou ? 'You' : 'Guest player'),
+                      style: AppText.title
+                          .copyWith(fontSize: 12, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        info(Icons.badge_rounded, 'UID', playerUid(roomId, player)),
+        if (!isBot)
+          info(Icons.phone_rounded, 'Number', 'Not linked'),
+        info(Icons.circle, 'Status', status),
+        const SizedBox(height: 12),
+        _sectionLabel('THIS MATCH'),
+        grid([
+          tile('Home', '$home/4'),
+          tile('On board', '${4 - home - yard}'),
+          tile('In yard', '$yard'),
+          tile('Lives', '${game.lives[player] ?? 0}',
+              valueColor: const Color(0xFFFF4D67),
+              icon: Icons.favorite_rounded),
+          tile('Captures', '${game.captures[player] ?? 0}',
+              valueColor: AppColors.mint),
+          tile('Pieces lost', '${game.lost[player] ?? 0}'),
+        ]),
+        const SizedBox(height: 14),
+        _sectionLabel('COINS'),
+        grid([
+          tile('Entry paid', formatCoins(entry), valueColor: gold),
+          tile('Prize pool', formatCoins(prize), valueColor: gold),
+          tile('Room', roomId),
+        ]),
+      ],
     ),
   );
 }
@@ -444,6 +798,7 @@ class PlayerAvatar extends StatelessWidget {
     required this.isYou,
     required this.rank,
     required this.timer,
+    this.size = 42,
   });
   final int player;
   final bool isBot;
@@ -452,20 +807,21 @@ class PlayerAvatar extends StatelessWidget {
 
   /// (serial, seconds) while the turn timer runs.
   final (int, int)? timer;
-
-  static const size = 48.0;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     final color = playerColors[player];
+    final inner = size - 8;
     final Widget picture = isYou
-        ? const Art(ArtKind.avatar, size: 40)
+        ? Art(ArtKind.avatar, size: inner)
         : isBot
-            ? const Art(ArtKind.robot, size: 31)
-            : Image.asset(pawnAssets[player], width: 25, height: 34);
+            ? Art(ArtKind.robot, size: inner * .78)
+            : Image.asset(pawnAssets[player],
+                width: inner * .62, height: inner * .86);
     Widget ring(double value, Color c) => CustomPaint(
-          size: const Size.square(size),
-          painter: _RingPainter(value, c),
+          size: Size.square(size),
+          painter: _RingPainter(value, c, size * .075),
         );
     return SizedBox.square(
       dimension: size,
@@ -474,8 +830,8 @@ class PlayerAvatar extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: inner,
+            height: inner,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(colors: [
@@ -524,16 +880,17 @@ class PlayerAvatar extends StatelessWidget {
 }
 
 class _RingPainter extends CustomPainter {
-  const _RingPainter(this.value, this.color);
+  const _RingPainter(this.value, this.color, this.stroke);
   final double value;
   final Color color;
+  final double stroke;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = (Offset.zero & size).deflate(1.75);
+    final rect = (Offset.zero & size).deflate(stroke / 2);
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.5
+      ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round;
     canvas.drawArc(rect, 0, 2 * math.pi, false,
         paint..color = const Color(0xFF14173F));
@@ -552,8 +909,8 @@ class DiceSocket extends StatelessWidget {
   final bool active;
   final Widget? child;
 
-  static const size = 48.0;
-  static const diceSize = 35.0;
+  static const size = 44.0;
+  static const diceSize = 32.0;
 
   @override
   Widget build(BuildContext context) {

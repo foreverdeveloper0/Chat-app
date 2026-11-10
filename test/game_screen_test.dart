@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:elite_play_ludo/game/sounds.dart';
+import 'package:elite_play_ludo/game/ludo_controller.dart';
 import 'package:elite_play_ludo/main.dart';
+import 'package:elite_play_ludo/screens/game_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,34 +38,39 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1600));
     expect(find.text('Player 1'), findsOneWidget);
     expect(find.text('Player 2'), findsOneWidget);
-    expect(find.textContaining('Prize 2K'), findsOneWidget);
+    expect(find.text('2K'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('GAME START'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 1300));
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.textContaining('tap the dice'), findsOneWidget);
+    final game = GameScreen.debugController!;
+    expect(game.phase, Phase.awaitingRoll);
+    expect(find.textContaining('tap the dice'), findsNothing);
 
-    // Play both seats: roll when asked, and when there is a real choice tap
-    // every piece (only a movable one reacts).
-    var rolls = 0;
-    for (var i = 0; i < 3000 && rolls < 60; i++) {
-      if (find.textContaining('tap the dice').evaluate().isNotEmpty) {
-        for (final p in [1, 3]) {
-          await tester.tap(find.byKey(ValueKey('panel-$p')),
-              warnIfMissed: false);
-        }
-        rolls++;
-      } else if (find.textContaining('pick a piece').evaluate().isNotEmpty) {
-        for (var k = 0; k < 16; k++) {
-          final piece = find.byKey(ValueKey('token-$k'));
-          if (piece.evaluate().isNotEmpty) {
-            await tester.tap(piece, warnIfMissed: false);
-          }
-        }
+    // Tapping a picture opens that player's profile.
+    await tester.tap(find.text('Player 2'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Player profile'), findsOneWidget);
+    expect(find.text('UID'), findsOneWidget);
+    await tester.tapAt(const Offset(180, 40));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Play both seats through the real widgets: tap the dock of whoever is
+    // on turn to roll, and tap a movable piece when there is a choice.
+    for (var i = 0; i < 3000 && game.rollTick < 60; i++) {
+      if (game.phase == Phase.awaitingRoll) {
+        await tester.tap(find.byKey(ValueKey('panel-${game.current}')),
+            warnIfMissed: false);
+      } else if (game.phase == Phase.choosing && game.movable.isNotEmpty) {
+        final t = game.movable.first;
+        await tester.tap(find.byKey(ValueKey('token-${t.player * 4 + t.index}')),
+            warnIfMissed: false);
       }
       await tester.pump(const Duration(milliseconds: 120));
     }
-    expect(rolls, 60);
+    expect(game.rollTick, 60);
     expect(tester.takeException(), isNull);
 
     // Tear down so pending game timers end with the disposed controller.

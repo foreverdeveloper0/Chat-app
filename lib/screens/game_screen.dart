@@ -32,6 +32,10 @@ class GameScreen extends StatefulWidget {
   final int entry;
   final String roomId;
 
+  /// The controller of the match on screen, for widget tests.
+  @visibleForTesting
+  static LudoController? debugController;
+
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
@@ -71,6 +75,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       onSfx: Sounds.play,
       onCapture: _onCapture,
     );
+    GameScreen.debugController = _game;
     _banner.value = 0;
     _intro.forward(from: 0).whenComplete(() {
       if (!mounted) return;
@@ -154,6 +159,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
+  void _openProfile(int player) {
+    Sounds.play(Sfx.tap);
+    showPlayerProfile(
+      context,
+      player: player,
+      name: widget.names[player] ?? 'Player',
+      isYou: widget.names[player] == 'You',
+      game: _game,
+      entry: widget.entry,
+      prize: _prize,
+      roomId: widget.roomId,
+    );
+  }
+
   Future<void> _confirmLeave() async {
     if (_game.phase == Phase.gameOver) return Navigator.of(context).pop();
     final leave = await showDialog<bool>(
@@ -180,19 +199,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if ((leave ?? false) && mounted) Navigator.of(context).pop();
   }
 
-  String _status() {
-    final g = _game;
-    if (g.phase == Phase.gameOver) return '';
-    final name = shortName(widget.names[g.current] ?? 'Player');
-    if (g.humanTurn && g.phase == Phase.awaitingRoll) {
-      return '$name — tap the dice';
-    }
-    if (g.humanTurn && g.phase == Phase.choosing && g.timerRunning) {
-      return '$name — pick a piece';
-    }
-    return g.message;
-  }
-
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -209,7 +215,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               builder: (context, _) => LayoutBuilder(
                 builder: (context, box) {
                   final board = math.min(
-                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 350);
+                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 322);
                   return Stack(
                     children: [
                       Column(
@@ -218,7 +224,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             prize: _prize,
                             entry: widget.entry,
                             roomId: widget.roomId,
-                            status: _status(),
                             onBack: _confirmLeave,
                           ),
                           const Spacer(),
@@ -230,16 +235,21 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                               size: board,
                               game: _game,
                               spin: _spin,
+                              pulse: _pulse,
                               intro: _intro,
                             ),
                           ),
                           const SizedBox(height: 8),
                           _panelRow(board, 3, 2),
                           const Spacer(),
-                          GameBottomBar(
+                          GameDock(
                             micOn: _mic,
                             onMic: _toggleMic,
                             onChat: _openChat,
+                            onQuick: (e) {
+                              Sounds.play(Sfx.chat);
+                              _say(_speaker, e);
+                            },
                           ),
                           const SizedBox(height: 6),
                         ],
@@ -281,6 +291,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             pulse: _pulse,
             mirrored: mirrored,
             bubble: _bubbles[p],
+            onProfile: () => _openProfile(p),
           )
         : const SizedBox(width: PlayerPanel.width, height: PlayerPanel.height);
     return SizedBox(
@@ -338,11 +349,13 @@ class _Board extends StatelessWidget {
     required this.size,
     required this.game,
     required this.spin,
+    required this.pulse,
     required this.intro,
   });
   final double size;
   final LudoController game;
   final Animation<double> spin;
+  final Animation<double> pulse;
   final Animation<double> intro;
 
   @override
@@ -432,6 +445,33 @@ class _Board extends StatelessWidget {
               ),
             ),
           ),
+          // The yard of whoever is on turn breathes with a soft light.
+          if (game.phase != Phase.gameOver)
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 320),
+              curve: Curves.easeOutCubic,
+              left: rim + LudoRules.yardOrigins[game.current].$1 * cell,
+              top: rim + LudoRules.yardOrigins[game.current].$2 * cell,
+              width: cell * 6,
+              height: cell * 6,
+              child: IgnorePointer(
+                child: FadeTransition(
+                  opacity: Tween(begin: .15, end: 1.0).animate(
+                      CurvedAnimation(parent: pulse, curve: Curves.easeInOut)),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                          color: Colors.white, width: cell * .16),
+                      gradient: const RadialGradient(
+                        radius: .75,
+                        colors: [Color(0x00FFFFFF), Color(0x66FFFFFF)],
+                        stops: [.55, 1],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           for (final p in game.seats)
             if (game.left.contains(p) || game.rankOf(p) > 0)
               Positioned(
@@ -698,11 +738,12 @@ class PlayerPanel extends StatelessWidget {
     required this.pulse,
     required this.mirrored,
     required this.bubble,
+    required this.onProfile,
   });
 
-  static const width = 128.0;
-  static const height = 84.0;
-  static const _slot = 52.0;
+  static const width = 106.0;
+  static const height = 78.0;
+  static const _slot = 46.0;
 
   final int player;
   final String name;
@@ -711,6 +752,7 @@ class PlayerPanel extends StatelessWidget {
   final Animation<double> pulse;
   final bool mirrored;
   final String? bubble;
+  final VoidCallback onProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -727,11 +769,11 @@ class PlayerPanel extends StatelessWidget {
     Widget plate({required Widget child, Gradient? gradient, Color? fill}) =>
         Container(
           width: _slot,
-          height: 16,
+          height: 15,
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 3),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(7.5),
             gradient: gradient,
             color: fill,
             border: Border.all(color: const Color(0x55FFFFFF), width: .8),
@@ -739,57 +781,62 @@ class PlayerPanel extends StatelessWidget {
           child: FittedBox(fit: BoxFit.scaleDown, child: child),
         );
 
-    final who = Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        SizedBox(
-          width: _slot,
-          height: 50,
-          child: Center(
-            child: PlayerAvatar(
-              player: player,
-              isBot: game.isBot(player),
-              isYou: isYou,
-              rank: rank,
-              // The ring drains while a human is on the clock.
-              timer: active && game.timerRunning
-                  ? (game.turnSerial, game.turnSeconds)
-                  : null,
+    // Tapping the picture opens the player's profile.
+    final who = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onProfile,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: _slot,
+            height: 46,
+            child: Center(
+              child: PlayerAvatar(
+                player: player,
+                isBot: game.isBot(player),
+                isYou: isYou,
+                rank: rank,
+                // The ring drains while a human is on the clock.
+                timer: active && game.timerRunning
+                    ? (game.turnSerial, game.turnSeconds)
+                    : null,
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 3),
-        plate(
-          gradient: LinearGradient(colors: [color, deep]),
-          child: Text(
-            shortName(name),
-            maxLines: 1,
-            style: AppText.title.copyWith(
-              fontSize: 11,
-              color: Colors.white,
-              height: 1.1,
-              shadows: const [Shadow(color: Color(0x88000000), blurRadius: 2)],
+          const SizedBox(height: 3),
+          plate(
+            gradient: LinearGradient(colors: [color, deep]),
+            child: Text(
+              shortName(name),
+              maxLines: 1,
+              style: AppText.title.copyWith(
+                fontSize: 10.5,
+                color: Colors.white,
+                height: 1.1,
+                shadows: const [Shadow(color: Color(0x88000000), blurRadius: 2)],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
 
     final Widget under;
     if (gone) {
       under = Text('LEFT',
           style: AppText.title.copyWith(
-              fontSize: 10, letterSpacing: 1, color: const Color(0xFFFF8A80)));
+              fontSize: 9.5, letterSpacing: 1, color: const Color(0xFFFF8A80)));
     } else if (rank > 0) {
       under = Text('${ordinal(rank)} place',
-          style: AppText.title.copyWith(fontSize: 10, color: rankColor(rank)));
+          style: AppText.title.copyWith(fontSize: 9.5, color: rankColor(rank)));
     } else {
       under = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           for (var i = 0; i < LudoController.maxLives; i++)
             Icon(Icons.favorite_rounded,
-                size: 8.6,
+                size: 7.8,
                 color: i < lives
                     ? const Color(0xFFFF4D67)
                     : const Color(0xFF3A3F7A)),
@@ -801,7 +848,7 @@ class PlayerPanel extends StatelessWidget {
       children: [
         SizedBox(
           width: _slot,
-          height: 50,
+          height: 46,
           child: Center(
             child: DiceSocket(
               active: active,
@@ -836,7 +883,7 @@ class PlayerPanel extends StatelessWidget {
           padding: const EdgeInsets.all(1.8),
           // The frame itself: brushed steel at rest, gold on the turn.
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(17),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -865,41 +912,41 @@ class PlayerPanel extends StatelessWidget {
                     offset: Offset(0, 4)),
             ],
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16.2),
-            child: Stack(
-              children: [
-                Positioned.fill(
+          // Only the painted body is clipped to the frame; the dice sits
+          // in an unclipped layer so it can fly up out of the dock.
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(15.2),
                   child: CustomPaint(
                     painter: _PanelPainter(
                         color: color, deep: deep, mirrored: mirrored, lit: active),
                   ),
                 ),
-                Positioned.fill(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: mirrored ? [play, who] : [who, play],
+              ),
+              Positioned.fill(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: mirrored ? [play, who] : [who, play],
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                top: -34,
+                height: 38,
+                child: IgnorePointer(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: bubble == null
+                        ? const SizedBox.shrink()
+                        : ChatBubble(key: ValueKey(bubble), text: bubble!),
                   ),
                 ),
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      child: bubble == null
-                          ? const SizedBox.shrink()
-                          : Align(
-                              key: ValueKey(bubble),
-                              alignment: const Alignment(0, -.55),
-                              child: SizedBox(
-                                  width: 100,
-                                  height: 38,
-                                  child: ChatBubble(text: bubble!)),
-                            ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1001,7 +1048,7 @@ class _DiceState extends State<_Dice> with SingleTickerProviderStateMixin {
   static const _airMs = LudoController.rollTicks * LudoController.rollTickMs;
   static const _totalMs = _airMs + LudoController.landMs;
   static const _air = _airMs / _totalMs; // share of the timeline spent airborne
-  static const _height = 34.0;
+  static const _height = 54.0;
 
   late final AnimationController _toss = AnimationController(
     vsync: this,
