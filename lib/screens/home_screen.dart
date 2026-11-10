@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/game_setup_sheet.dart';
+import '../widgets/update_ui.dart';
 import '../widgets/home_sections.dart';
 
 /// Everything is laid out on a 390pt-wide design canvas and scaled to the
@@ -21,12 +22,22 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) autoCheckForUpdate(context);
+    });
+  }
+
   void _onTap(String label) {
     switch (label) {
       case 'Pass & Play':
         showGameSetup(context, vsComputer: false);
       case 'Play vs Computer':
         showGameSetup(context, vsComputer: true);
+      case 'Settings':
+        showSettingsSheet(context);
       default:
         _comingSoon(label);
     }
