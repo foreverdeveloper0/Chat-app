@@ -6,6 +6,7 @@ import '../art/icons.dart';
 import '../art/pieces.dart';
 import '../game/ludo_controller.dart';
 import '../game/ludo_rules.dart';
+import '../game/sounds.dart';
 import '../theme/app_colors.dart';
 import '../theme/board_assets.dart';
 import '../widgets/game_card.dart';
@@ -46,7 +47,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _newGame() {
-    _game = LudoController(seats: widget.seats, bots: widget.bots);
+    _game = LudoController(
+        seats: widget.seats, bots: widget.bots, onSfx: Sounds.play);
     _intro.forward(from: 0).whenComplete(() {
       if (mounted) _game.start();
     });
@@ -215,7 +217,19 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 44),
+          ValueListenableBuilder(
+            valueListenable: Sounds.muted,
+            builder: (_, muted, _) => GameCard(
+              width: 44,
+              height: 44,
+              radius: 14,
+              onTap: () => Sounds.muted.value = !muted,
+              child: Icon(
+                muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                color: muted ? const Color(0xFFA9AEDC) : AppColors.cream,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -580,7 +594,7 @@ class _PlayerPanel extends StatelessWidget {
         ? 'Home ${game.homeCount(player)}/4'
         : switch (game.phase) {
             Phase.awaitingRoll => game.isBot(player) ? 'Thinking…' : 'Tap to roll',
-            Phase.rolling => 'Rolling…',
+            Phase.rolling || Phase.landed => 'Rolling…',
             Phase.choosing => game.movable.isEmpty
                 ? 'No move'
                 : (game.isBot(player) ? 'Thinking…' : 'Pick a piece'),
@@ -615,12 +629,23 @@ class _PlayerPanel extends StatelessWidget {
         ),
       ),
       const SizedBox(width: 8),
-      _Dice(game: game, active: active, canRoll: canRoll, pulse: pulse),
+      _Dice(
+        game: game,
+        active: active,
+        canRoll: canRoll,
+        pulse: pulse,
+        color: color,
+      ),
     ];
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: canRoll ? game.roll : null,
+      onTap: canRoll
+          ? () {
+              Sounds.play(Sfx.tap);
+              game.roll();
+            }
+          : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         height: 62,
@@ -647,22 +672,58 @@ class _PlayerPanel extends StatelessWidget {
   }
 }
 
-class _Dice extends StatelessWidget {
+/// The dice is tossed up out of its slot, tumbles in the air, drops back
+/// and lands with a squashy bounce and a burst ring before showing its value.
+class _Dice extends StatefulWidget {
   const _Dice({
     required this.game,
     required this.active,
     required this.canRoll,
     required this.pulse,
+    required this.color,
   });
   final LudoController game;
   final bool active;
   final bool canRoll;
   final Animation<double> pulse;
+  final Color color;
+
+  @override
+  State<_Dice> createState() => _DiceState();
+}
+
+class _DiceState extends State<_Dice> with SingleTickerProviderStateMixin {
+  static const _airMs = LudoController.rollTicks * LudoController.rollTickMs;
+  static const _totalMs = _airMs + LudoController.landMs;
+  static const _air = _airMs / _totalMs; // share of the timeline spent airborne
+
+  late final AnimationController _toss = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: _totalMs),
+    value: 1,
+  );
+  Phase? _lastPhase;
+
+  @override
+  void didUpdateWidget(_Dice old) {
+    super.didUpdateWidget(old);
+    final phase = widget.active ? widget.game.phase : null;
+    if (phase == Phase.rolling && _lastPhase != Phase.rolling) {
+      _toss.forward(from: 0);
+    }
+    _lastPhase = phase;
+  }
+
+  @override
+  void dispose() {
+    _toss.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     const size = 46.0;
-    if (!active) {
+    if (!widget.active) {
       return Container(
         width: size,
         height: size,
@@ -672,28 +733,87 @@ class _Dice extends StatelessWidget {
         ),
       );
     }
-    final rolling = game.phase == Phase.rolling;
-    Widget dice = AnimatedRotation(
-      turns: rolling ? game.rollTick * .21 : 0,
-      duration: const Duration(milliseconds: 70),
-      child: AnimatedScale(
-        scale: rolling ? .82 : 1,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutBack,
-        child: CustomPaint(
-          size: const Size.square(size),
-          painter: _DicePainter(game.dice),
-        ),
+    return SizedBox.square(
+      dimension: size,
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_toss, widget.pulse]),
+        builder: (_, _) {
+          final t = _toss.value;
+          final flying = t < _air;
+          final a = flying ? t / _air : 1.0; // 0..1 through the air
+          final l = flying ? 0.0 : (t - _air) / (1 - _air); // 0..1 landing
+
+          // Height: one big arc, then a small rebound.
+          final arc = 4 * a * (1 - a);
+          final rebound = flying ? 0.0 : math.sin(l * math.pi) * (1 - l) * .22;
+          final lift = (flying ? arc : rebound) * 96;
+
+          // Tumble: spins fast at launch and eases into the landing.
+          final spin = (1 - math.pow(1 - a, 2.2)) * 6 * math.pi;
+          final flip = flying ? math.cos(a * 5 * math.pi) : 1.0;
+
+          // Squash on impact, then settle.
+          final squash =
+              flying ? 0.0 : math.sin(l * math.pi * 2.5) * (1 - l) * .2;
+          var scale = 1 + arc * .5;
+          if (widget.canRoll) scale *= .94 + .14 * widget.pulse.value;
+
+          return Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              // Ground shadow shrinks as the dice climbs.
+              Positioned(
+                bottom: -3,
+                child: Opacity(
+                  opacity: .35 * (1 - .7 * (lift / 96).clamp(0, 1)),
+                  child: Container(
+                    width: size * (.8 - .35 * (lift / 96).clamp(0, 1)),
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.all(Radius.elliptical(20, 4)),
+                    ),
+                  ),
+                ),
+              ),
+              // Impact ring.
+              if (!flying && l < 1)
+                Transform.scale(
+                  scale: .7 + l * 1.5,
+                  child: Container(
+                    width: size,
+                    height: size,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: widget.color.withValues(alpha: (1 - l) * .9),
+                        width: 3 * (1 - l) + .5,
+                      ),
+                    ),
+                  ),
+                ),
+              Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..translateByDouble(0, -lift, 0, 1)
+                  ..rotateZ(flying ? spin : 0)
+                  ..scaleByDouble(
+                    scale * (1 + squash),
+                    scale * (flying ? (.55 + .45 * flip.abs()) : 1 - squash),
+                    1,
+                    1,
+                  ),
+                child: CustomPaint(
+                  size: const Size.square(size),
+                  painter: _DicePainter(widget.game.dice),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
-    if (canRoll) {
-      dice = ScaleTransition(
-        scale: Tween(begin: .92, end: 1.1).animate(
-            CurvedAnimation(parent: pulse, curve: Curves.easeInOut)),
-        child: dice,
-      );
-    }
-    return SizedBox.square(dimension: size, child: dice);
   }
 }
 

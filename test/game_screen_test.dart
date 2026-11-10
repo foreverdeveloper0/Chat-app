@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:elite_play_ludo/game/sounds.dart';
 import 'package:elite_play_ludo/main.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   setUpAll(() async {
+    Sounds.enabled = false;
     final loader = FontLoader('Fredoka');
     for (final w in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
       final bytes = File('assets/fonts/Fredoka-$w.ttf').readAsBytesSync();

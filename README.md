@@ -32,6 +32,11 @@ flutter run
 Every push builds an APK with GitHub Actions and publishes it under
 **Releases → Elite Play BD Ludo - demo APK**.
 
+## Sounds
+
+The effects in `assets/sounds` (dice, step, capture, home, win) were
+synthesized for this project. The speaker button in a match mutes them.
+
 ## Fonts
 
 Fredoka, licensed under the SIL Open Font License 1.1.

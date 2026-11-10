@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'ludo_rules.dart';
+import 'sounds.dart';
 
 class Token {
   Token(this.player, this.index);
@@ -17,7 +18,7 @@ class Token {
   bool get onTrack => progress >= 0 && progress <= LudoRules.lastTrack;
 }
 
-enum Phase { awaitingRoll, rolling, choosing, moving, gameOver }
+enum Phase { awaitingRoll, rolling, landed, choosing, moving, gameOver }
 
 /// Runs a Ludo match: turn order, dice, moves, captures, bots and the
 /// step-by-step timing that the board animates against.
@@ -27,6 +28,7 @@ class LudoController extends ChangeNotifier {
     this.bots = const {},
     Random? random,
     this.speed = 1,
+    this.onSfx,
   })  : assert(seats.length >= 2),
         _rng = random ?? Random(),
         current = seats.first;
@@ -39,9 +41,16 @@ class LudoController extends ChangeNotifier {
   final double speed;
   final Random _rng;
 
+  /// Called at each audible moment of the match.
+  final void Function(Sfx)? onSfx;
+
   final tokens = [
     for (var p = 0; p < 4; p++) [for (var i = 0; i < 4; i++) Token(p, i)],
   ];
+
+  static const rollTicks = 12;
+  static const rollTickMs = 70;
+  static const landMs = 380;
 
   int current;
   Phase phase = Phase.awaitingRoll;
@@ -94,15 +103,22 @@ class LudoController extends ChangeNotifier {
     if (phase != Phase.awaitingRoll) return;
     phase = Phase.rolling;
     message = '';
-    for (var i = 0; i < 9; i++) {
+    onSfx?.call(Sfx.diceRoll);
+    // The dice is in the air for rollTicks * rollTickMs.
+    for (var i = 0; i < rollTicks; i++) {
       dice = 1 + _rng.nextInt(6);
       rollTick++;
       _notify();
-      if (!await _wait(65)) return;
+      if (!await _wait(rollTickMs)) return;
     }
     dice = forced ?? 1 + _rng.nextInt(6);
     rollTick++;
     HapticFeedback.mediumImpact();
+    onSfx?.call(Sfx.diceLand);
+    // Let the landing bounce finish before anything moves.
+    phase = Phase.landed;
+    _notify();
+    if (!await _wait(landMs)) return;
 
     if (dice == 6) {
       sixes++;
@@ -148,10 +164,12 @@ class LudoController extends ChangeNotifier {
     if (phase != Phase.choosing || !movable.contains(token)) return;
     phase = Phase.moving;
     movable = const [];
-    final steps = token.inYard ? 1 : dice;
+    final leaving = token.inYard;
+    final steps = leaving ? 1 : dice;
     for (var i = 0; i < steps; i++) {
       token.progress++;
       HapticFeedback.selectionClick();
+      onSfx?.call(leaving ? Sfx.enter : Sfx.step);
       _notify();
       if (!await _wait(170)) return;
     }
@@ -169,8 +187,10 @@ class LudoController extends ChangeNotifier {
         }
       }
     }
+    if (token.isHome) onSfx?.call(Sfx.home);
     if (captured) {
       HapticFeedback.heavyImpact();
+      onSfx?.call(Sfx.capture);
       _notify();
       if (!await _wait(520)) return;
     }
@@ -178,6 +198,7 @@ class LudoController extends ChangeNotifier {
     if (homeCount(current) == 4) {
       winner = current;
       phase = Phase.gameOver;
+      onSfx?.call(Sfx.win);
       _notify();
       return;
     }
