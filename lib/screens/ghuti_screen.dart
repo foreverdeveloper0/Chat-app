@@ -324,7 +324,10 @@ class _GhutiScreenState extends State<GhutiScreen>
   }
 
   Widget _board(Size size) {
-    final piece = size.width * .155;
+    final piece = size.width * .095;
+    // Taps land on a bigger circle than the piece, so small pieces are
+    // still easy to hit.
+    final hit = size.width * .17;
     Offset at(Pt p) {
       final f = GhutiGame.spot(p);
       return Offset(f.dx * size.width, f.dy * size.height);
@@ -362,7 +365,7 @@ class _GhutiScreenState extends State<GhutiScreen>
                         color: over == null
                             ? const Color(0xFF45E3A6)
                             : const Color(0xFFFF4D4D),
-                        width: 3,
+                        width: 2.5,
                       ),
                     ),
                   ),
@@ -424,10 +427,10 @@ class _GhutiScreenState extends State<GhutiScreen>
           // Tap targets on every point (on top, so pieces and spots both work).
           for (final p in GhutiGame.points)
             Positioned(
-              left: at(p).dx - piece * .55,
-              top: at(p).dy - piece * .55,
-              width: piece * 1.1,
-              height: piece * 1.1,
+              left: at(p).dx - hit / 2,
+              top: at(p).dy - hit / 2,
+              width: hit,
+              height: hit,
               child: GestureDetector(
                 key: ValueKey('pt-${p.x},${p.y}'),
                 behavior: HitTestBehavior.opaque,
