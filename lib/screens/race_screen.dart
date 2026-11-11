@@ -45,7 +45,7 @@ class _RaceScreenState extends State<RaceScreen>
   final _input = RaceInput();
   final _focus = FocusNode();
   Duration _last = Duration.zero;
-  double _clock = 0, _sky = 0, _shake = 0;
+  double _clock = 0, _sky = 0, _shake = 0, _camX = 0;
 
   /// Seconds until the lights go green; negative once racing.
   double _countdown = 3.5;
@@ -77,6 +77,7 @@ class _RaceScreenState extends State<RaceScreen>
     _results = false;
     _flash = null;
     _shake = 0;
+    _camX = _game.player.x;
   }
 
   @override
@@ -115,6 +116,8 @@ class _RaceScreenState extends State<RaceScreen>
     if (_game.over) input.nitro = false;
     final ev = _game.update(dt, input);
     final p = _game.player;
+    // The camera glides after the car instead of being bolted to it.
+    _camX += (p.x - _camX) * (1 - math.exp(-5 * dt));
     _sky +=
         _game.segmentAt(p.z).curve * (p.speed / RaceGame.maxSpeed) * dt * .4;
 
@@ -182,6 +185,7 @@ class _RaceScreenState extends State<RaceScreen>
                 painter: RaceScenePainter(
                   game: _game,
                   skyOffset: () => _sky,
+                  cameraX: () => _camX,
                   time: () => _clock,
                   shake: () => _shake,
                   repaint: _frame,

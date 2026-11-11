@@ -86,6 +86,7 @@ class RaceScenePainter extends CustomPainter {
   RaceScenePainter({
     required this.game,
     required this.skyOffset,
+    required this.cameraX,
     required this.time,
     required this.shake,
     required Listenable repaint,
@@ -93,6 +94,9 @@ class RaceScenePainter extends CustomPainter {
 
   final RaceGame game;
   final double Function() skyOffset;
+
+  /// Where the camera is across the road; it trails the car a little.
+  final double Function() cameraX;
   final double Function() time;
   final double Function() shake;
 
@@ -125,7 +129,8 @@ class RaceScenePainter extends CustomPainter {
     final pSeg = g.segmentAt(p.z);
     final pPct = (p.z % RaceGame.segLen) / RaceGame.segLen;
     final playerY = pSeg.y1 + (pSeg.y2 - pSeg.y1) * pPct;
-    final camX = p.x * RaceGame.roadWidth;
+    final camAt = cameraX();
+    final camX = camAt * RaceGame.roadWidth;
     final camY = RaceGame.cameraHeight + playerY;
 
     var maxy = h;
@@ -200,7 +205,11 @@ class RaceScenePainter extends CustomPainter {
     final off = p.x.abs() > 1;
     final bob = math.sin(t * 40) * (off ? 3.5 : 1) * pct;
     final carW = _carWidth / RaceGame.cameraHeight * w / 2;
-    final at = Offset(w / 2, h * ground + bob);
+    final at = Offset(
+      w / 2 +
+          (p.x - camAt) * RaceGame.roadWidth / RaceGame.cameraHeight * w / 2,
+      h * ground + bob,
+    );
     if (off && pct > .05) _dust(canvas, at, carW, t);
     _car(canvas, at, carW, p, t, p.boosting);
 
@@ -237,7 +246,7 @@ class RaceScenePainter extends CustomPainter {
     canvas.translate(at.dx, at.dy);
     // Turn about the middle of the car.
     canvas.translate(0, -height / 2);
-    canvas.rotate(r.steer * .09);
+    canvas.rotate(r.steer * .16);
     canvas.translate(0, height / 2);
     if (boost) {
       for (final s in [-1.0, 1.0]) {

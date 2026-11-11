@@ -155,7 +155,11 @@ class RaceGame {
   static const decel = -maxSpeed / 5;
   static const offRoadDecel = -maxSpeed / 2;
   static const offRoadLimit = maxSpeed / 4;
-  static const centrifugal = .3;
+  static const centrifugal = .2;
+
+  /// Steering: how fast the wheel turns and returns (per second), and the
+  /// sideways speed at full lock, in road half-widths per second.
+  static const steerRate = 7.0, steerReturn = 10.0, steerSpeed = 1.5;
   static const carLength = segLen * .9;
   static const carHalfWidth = .17;
 
@@ -255,20 +259,40 @@ class RaceGame {
       }
       for (final side in const [-1, 1]) {
         if (i.isEven && rng.nextDouble() < .55) {
-          s.props.add(RoadProp(
-              Prop.tree, side * (1.9 + rng.nextDouble() * 3.4), rng.nextInt(8)));
+          s.props.add(
+            RoadProp(
+              Prop.tree,
+              side * (1.9 + rng.nextDouble() * 3.4),
+              rng.nextInt(8),
+            ),
+          );
         }
         if (rng.nextDouble() < .35) {
-          s.props.add(RoadProp(
-              Prop.bush, side * (1.6 + rng.nextDouble() * 2.2), rng.nextInt(8)));
+          s.props.add(
+            RoadProp(
+              Prop.bush,
+              side * (1.6 + rng.nextDouble() * 2.2),
+              rng.nextInt(8),
+            ),
+          );
         }
         if (rng.nextDouble() < .45) {
-          s.props.add(RoadProp(Prop.flower,
-              side * (1.18 + rng.nextDouble() * 1.6), rng.nextInt(8)));
+          s.props.add(
+            RoadProp(
+              Prop.flower,
+              side * (1.18 + rng.nextDouble() * 1.6),
+              rng.nextInt(8),
+            ),
+          );
         }
         if (rng.nextDouble() < .06) {
-          s.props.add(RoadProp(
-              Prop.rock, side * (1.7 + rng.nextDouble() * 2), rng.nextInt(4)));
+          s.props.add(
+            RoadProp(
+              Prop.rock,
+              side * (1.7 + rng.nextDouble() * 2),
+              rng.nextInt(4),
+            ),
+          );
         }
       }
       // Things on the tarmac to steer round, never near the start.
@@ -348,12 +372,20 @@ class RaceGame {
   void _drivePlayer(Racer p, double dt, RaceInput input, RaceEvents ev) {
     final seg = segmentAt(p.z);
     final pct = p.speed / maxSpeed;
-    final dx = dt * 2 * pct;
     p.stun = max(0, p.stun - dt);
-    p.steer = input.left ? -1 : (input.right ? 1 : 0);
-    if (p.stun > 0) p.steer = sin(p.stun * 30);
-    p.x += p.steer * dx;
-    p.x -= dx * pct * seg.curve * centrifugal;
+    // The wheel eases over and eases back, so a tap is a gentle nudge and
+    // a hold builds into a full turn.
+    final want = p.stun > 0
+        ? sin(p.stun * 30) * .6
+        : (input.left ? -1.0 : (input.right ? 1.0 : 0.0));
+    final rate = want == 0 ? steerReturn : steerRate;
+    p.steer += (want - p.steer) * (1 - exp(-rate * dt));
+    if (want == 0 && p.steer.abs() < .01) p.steer = 0;
+    // Sideways speed barely depends on road speed once the car is rolling.
+    final grip = min(1.0, pct * 5) * (.55 + .45 * min(1.0, pct));
+    p.x += p.steer * steerSpeed * grip * dt;
+    // Bends push the car gently outwards.
+    p.x -= dt * 2 * pct * pct * seg.curve * centrifugal;
 
     p.boosting = input.nitro && nitro > 0 && !input.brake;
     p.braking = input.brake;
@@ -429,7 +461,8 @@ class RaceGame {
     }
     want = want.clamp(-.8, .8);
     final dx = (want - r.x);
-    r.steer = dx.sign * min(1, dx.abs() * 4);
+    final lean = dx.sign * min(1.0, dx.abs() * 4);
+    r.steer += (lean - r.steer) * (1 - exp(-8 * dt));
     r.x += dx.clamp(-1.2 * dt, 1.2 * dt);
   }
 
