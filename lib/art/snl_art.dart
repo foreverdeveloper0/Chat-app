@@ -87,11 +87,22 @@ class SnlBoardView extends StatelessWidget {
             child: Image.asset(snlBoardAsset,
                 fit: BoxFit.fill, filterQuality: FilterQuality.medium),
           ),
-          // Ladders lie under the snakes.
-          for (final p in layout.pieces)
-            if (!p.snake) _ladder(g, p),
-          for (final p in layout.pieces)
-            if (p.snake) _snake(g, p),
+          // Nothing may spill over the gold frame: pieces are clipped to
+          // the playing grid. Ladders lie under the snakes.
+          Positioned.fill(
+            child: ClipRRect(
+              clipper: _GridClipper(),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  for (final p in layout.pieces)
+                    if (!p.snake) _ladder(g, p),
+                  for (final p in layout.pieces)
+                    if (p.snake) _snake(g, p),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -101,7 +112,7 @@ class SnlBoardView extends StatelessWidget {
     final foot = g.centre(p.from), top = g.centre(p.to);
     final d = top - foot;
     // Rails run a little past both squares.
-    final h = d.distance + g.cellH * .5;
+    final h = d.distance + g.cellH * .3;
     final w = math.min(h * _ladderAspect[p.skin], g.cellW * .62);
     final mid = (foot + top) / 2;
     return Positioned(
@@ -125,7 +136,7 @@ class SnlBoardView extends StatelessWidget {
     final d = tail - head;
     final w = d.distance / (tx - hx);
     // Long snakes keep their shape; none grows fatter than a square.
-    final h = math.min(w * ratio, g.cellW * 1.05);
+    final h = math.min(w * ratio, g.cellW * .8);
     final angle = math.atan2(d.dy, d.dx);
     return Positioned(
       left: head.dx - hx * w,
@@ -164,4 +175,16 @@ class SnlBoardView extends StatelessWidget {
           image,
         ],
       );
+}
+
+class _GridClipper extends CustomClipper<RRect> {
+  @override
+  RRect getClip(Size size) => RRect.fromRectAndRadius(
+        Rect.fromLTWH(size.width * _gridLeft, size.height * _gridTop,
+            size.width * _gridWidth, size.height * _gridHeight),
+        Radius.circular(size.width * .03),
+      );
+
+  @override
+  bool shouldReclip(_GridClipper old) => false;
 }

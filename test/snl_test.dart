@@ -36,6 +36,9 @@ void main() {
       // A snake waits in the last row, and ladders never leave the board.
       expect(l.snakes.keys.any((h) => h > 90), isTrue);
       for (final p in l.pieces) {
+        // Snakes stay off the outer columns so they cannot bulge outside.
+        final cols = snlCell(p.from).x + snlCell(p.to).x;
+        if (p.snake) expect(cols, inInclusiveRange(2, 16));
         expect(p.skin,
             lessThan(p.snake ? SnlLayout.snakeSkins : SnlLayout.ladderSkins));
       }

@@ -81,6 +81,12 @@ class SnlLayout {
       final bx = b.x.toDouble(), by = b.y * _tall;
       final span = sqrt(pow(ax - bx, 2) + pow(ay - by, 2));
       if (span < 2 || span > 7.5) return false;
+      // A snake's curves need room on both sides, so it never runs along
+      // the outer columns; a ladder there is fine as long as it is upright.
+      final edge = (a.x == 0 || a.x == 9) && (b.x == 0 || b.x == 9);
+      if (to < from ? (a.x + b.x < 2 || a.x + b.x > 16) : (edge && a.x != b.x)) {
+        return false;
+      }
       final line = [
         for (var i = 0; i <= 8; i++)
           Point(ax + (bx - ax) * i / 8, ay + (by - ay) * i / 8),
