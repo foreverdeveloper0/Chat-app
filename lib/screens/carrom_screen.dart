@@ -637,7 +637,7 @@ class _TablePainter extends CustomPainter {
     for (final p in game.pieces) {
       if (p.pocketed) continue;
       canvas.drawCircle(
-          (p.pos + Offset(.003, p.radius * .45)) * s, p.radius * s * 1.05, shadow);
+          (p.pos + const Offset(.003, .005)) * s, p.radius * s * 1.02, shadow);
     }
 
     // Light trail behind a moving striker.
@@ -878,56 +878,37 @@ class _TablePainter extends CustomPainter {
   bool shouldRepaint(_TablePainter old) => true;
 }
 
-/// A piece seen from just above: its round face sitting on a short
-/// coloured side, so it reads as a thick disc rather than a flat sticker.
+/// A piece seen straight from above: its round face, with a dark rim and
+/// a light edge so it reads as a solid disc. Nothing is drawn outside its
+/// circle, so touching pieces never look stacked.
 class _Puck extends StatelessWidget {
   const _Puck({required this.kind});
   final PieceKind kind;
 
-  static const _side = {
-    PieceKind.white: (Color(0xFFC81E2A), Color(0xFF6E0A10)),
-    PieceKind.black: (Color(0xFF2A2A2E), Color(0xFF050506)),
-    PieceKind.queen: (Color(0xFFA0101C), Color(0xFF4A0208)),
-    PieceKind.striker: (Color(0xFF1F4FD6), Color(0xFF0A1F66)),
+  static const _rim = {
+    PieceKind.white: Color(0xFF8A1A1F),
+    PieceKind.black: Color(0xFF000000),
+    PieceKind.queen: Color(0xFF4A0208),
+    PieceKind.striker: Color(0xFF0A1F66),
   };
 
   @override
   Widget build(BuildContext context) {
-    final (light, dark) = _side[kind]!;
-    return LayoutBuilder(builder: (context, box) {
-      final d = box.maxWidth, depth = d * .13;
-      return Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // The side band, peeking out below the face.
-          Positioned(
-            left: 0,
-            top: depth,
-            width: d,
-            height: d,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [dark, light, dark],
-                  stops: const [0, .45, 1],
-                ),
-                border: Border(
-                  bottom: BorderSide(
-                      color: const Color(0xFFE3B341), width: d * .025),
-                ),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: Image.asset(_pieceAsset[kind]!,
-                filterQuality: FilterQuality.medium),
-          ),
-        ],
-      );
-    });
+    return DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: _rim[kind]!.withValues(alpha: .55), width: 1),
+        gradient: const RadialGradient(
+          center: Alignment(-.3, -.35),
+          radius: .9,
+          colors: [Color(0x00FFFFFF), Color(0x00000000), Color(0x40000000)],
+          stops: [0, .78, 1],
+        ),
+      ),
+      child: Image.asset(_pieceAsset[kind]!,
+          filterQuality: FilterQuality.medium),
+    );
   }
 }
 
