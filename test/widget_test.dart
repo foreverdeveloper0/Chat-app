@@ -25,9 +25,13 @@ void main() {
     await tester.pumpWidget(const ElitePlayLudoApp());
     await tester.pump();
 
-    expect(find.text('LUDO'), findsWidgets);
+    expect(find.text('ELITE PLAY BD'), findsOneWidget);
     expect(find.text('OUR GAMES'), findsOneWidget);
-    expect(find.text('SNAKE'), findsOneWidget);
+    // The carousel opens on the Ludo banner; every game has a logo tile.
+    expect(find.byKey(const ValueKey('banner-ludo')), findsOneWidget);
+    for (final key in ['ludo', 'snake', 'carrom', 'ghuti', 'racing', 'fruit', 'poker']) {
+      expect(find.byKey(ValueKey('game-$key')), findsOneWidget);
+    }
     expect(find.text('ALL FEATURES'), findsOneWidget);
     expect(find.textContaining('Wallet'), findsNothing);
     expect(tester.takeException(), isNull);

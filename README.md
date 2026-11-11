@@ -27,6 +27,21 @@ The Voice button is only a mic toggle for now: real voice chat, coins that
 are actually spent or won, and Play Online / Play with Friends / Tournament
 all need a server and are not built yet.
 
+## Snake
+
+Classic Snake, opened from its tile or banner on the home page.
+
+- Steer by swiping, with the on-screen arrow pad, or with the arrow keys.
+- Three speeds (Easy, Normal, Hard) and two arenas: **Walls** (touching a
+  wall ends the game) or **Open** (leave one edge, come back on the other).
+- Fruit is worth 10 and grows the snake; every fifth fruit a timed gold
+  bonus appears that is worth more the sooner it is eaten. The snake speeds
+  up as it eats. Running into yourself ends the game.
+- Pause, restart, and a best score kept on the device for each speed and arena.
+
+The other games on the hub (Carrom, 16 Ghuti, Car Racing, Fruit Cut, Poker)
+are placeholders that say "coming soon".
+
 ## Run
 
 ```

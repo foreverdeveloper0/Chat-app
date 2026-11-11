@@ -102,6 +102,108 @@ class RoundButton extends StatelessWidget {
   }
 }
 
+/// One labelled value inside a [GoldPlaque].
+class PlaqueStat extends StatelessWidget {
+  const PlaqueStat(this.label, this.value, {super.key, this.color, this.lead});
+  final String label;
+  final String value;
+  final Color? color;
+  final Widget? lead;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(label,
+            style: AppText.title.copyWith(
+                fontSize: 9,
+                letterSpacing: 1.4,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF9EA4DC))),
+        const SizedBox(height: 2),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (lead != null) ...[lead!, const SizedBox(width: 4)],
+              Text(value,
+                  maxLines: 1,
+                  style: AppText.title.copyWith(
+                      fontSize: 15.5, color: color ?? AppColors.cream)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Gold-trimmed capsule holding a row of stats split by hairlines.
+class GoldPlaque extends StatelessWidget {
+  const GoldPlaque({super.key, required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    const divider = SizedBox(
+      width: 1,
+      height: 26,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0x00E3B341), Color(0xAAE3B341), Color(0x00E3B341)],
+          ),
+        ),
+      ),
+    );
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.all(1.6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFFFF3B8),
+            Color(0xFFE3B341),
+            Color(0xFF8A5E0C),
+            Color(0xFFFFE28A),
+          ],
+        ),
+        boxShadow: const [
+          BoxShadow(color: Color(0x55FFC93A), blurRadius: 12),
+          BoxShadow(
+              color: Color(0x88060720), blurRadius: 10, offset: Offset(0, 5)),
+        ],
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24.4),
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF2E3380), Color(0xFF12143F)],
+          ),
+        ),
+        child: Row(
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) divider,
+              Expanded(child: children[i]),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Top bar: back, a gold-trimmed plaque with prize / room / entry, sound.
 class GameHeader extends StatelessWidget {
   const GameHeader({
@@ -118,47 +220,6 @@ class GameHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget stat(String label, String value, {Color? color, Widget? lead}) =>
-        Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(label,
-                  style: AppText.title.copyWith(
-                      fontSize: 9,
-                      letterSpacing: 1.4,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF9EA4DC))),
-              const SizedBox(height: 2),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (lead != null) ...[lead, const SizedBox(width: 4)],
-                    Text(value,
-                        maxLines: 1,
-                        style: AppText.title.copyWith(
-                            fontSize: 15.5, color: color ?? AppColors.cream)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-    const divider = SizedBox(
-      width: 1,
-      height: 26,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0x00E3B341), Color(0xAAE3B341), Color(0x00E3B341)],
-          ),
-        ),
-      ),
-    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
       child: Row(
@@ -166,51 +227,14 @@ class GameHeader extends StatelessWidget {
           RoundButton(icon: Icons.arrow_back_rounded, onTap: onBack),
           const SizedBox(width: 8),
           Expanded(
-            child: Container(
-              height: 52,
-              padding: const EdgeInsets.all(1.6),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(26),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFFFFF3B8),
-                    Color(0xFFE3B341),
-                    Color(0xFF8A5E0C),
-                    Color(0xFFFFE28A),
-                  ],
-                ),
-                boxShadow: const [
-                  BoxShadow(color: Color(0x55FFC93A), blurRadius: 12),
-                  BoxShadow(
-                      color: Color(0x88060720),
-                      blurRadius: 10,
-                      offset: Offset(0, 5)),
-                ],
-              ),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24.4),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xFF2E3380), Color(0xFF12143F)],
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    stat('PRIZE', formatCoins(prize),
-                        color: const Color(0xFFFFE28A),
-                        lead: const Art(ArtKind.coin, size: 17)),
-                    divider,
-                    stat('ROOM', roomId),
-                    divider,
-                    stat('ENTRY', formatCoins(entry)),
-                  ],
-                ),
-              ),
+            child: GoldPlaque(
+              children: [
+                PlaqueStat('PRIZE', formatCoins(prize),
+                    color: const Color(0xFFFFE28A),
+                    lead: const Art(ArtKind.coin, size: 17)),
+                PlaqueStat('ROOM', roomId),
+                PlaqueStat('ENTRY', formatCoins(entry)),
+              ],
             ),
           ),
           const SizedBox(width: 8),

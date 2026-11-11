@@ -3,9 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../art/icons.dart';
+import '../game/catalog.dart';
 import '../theme/app_colors.dart';
+import '../widgets/banner_carousel.dart';
 import '../widgets/game_setup_sheet.dart';
 import '../widgets/home_sections.dart';
+import '../widgets/snake_setup_sheet.dart';
 import '../widgets/update_ui.dart';
 
 /// Everything is laid out on a 390pt-wide design canvas and scaled to the
@@ -64,10 +67,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onGame(GameInfo game) {
-    if (game.name == 'LUDO') {
-      showLudoModes(context);
-    } else {
-      showComingSoon(context, game.name[0] + game.name.substring(1).toLowerCase());
+    switch (game.key) {
+      case 'ludo':
+        showLudoModes(context);
+      case 'snake':
+        showSnakeSetup(context);
+      default:
+        showComingSoon(context, game.name);
     }
   }
 
@@ -113,20 +119,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                           const SizedBox(height: 8),
                                           const BrandHeader(),
                                           const SizedBox(height: 10),
-                                          HeroCard(
-                                              onPlay: () =>
-                                                  showLudoModes(context)),
-                                          const SizedBox(height: 14),
+                                          BannerCarousel(onGame: _onGame),
+                                          const SizedBox(height: 10),
                                           const SectionTitle(
                                               icon:
                                                   Icons.sports_esports_rounded,
                                               label: 'OUR GAMES'),
                                           const SizedBox(height: 10),
-                                          GamesGrid(
-                                            onGame: _onGame,
-                                            onMore: () => showComingSoon(
-                                                context, 'More games'),
-                                          ),
+                                          GamesGrid(onGame: _onGame),
                                           const SizedBox(height: 14),
                                           const SectionTitle(
                                               icon: Icons.bolt_rounded,

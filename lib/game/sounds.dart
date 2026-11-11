@@ -17,6 +17,10 @@ enum Sfx {
   lifeLost,
   chat,
   tap,
+  // Snake
+  eat,
+  bonus,
+  crash,
 }
 
 abstract final class Sounds {

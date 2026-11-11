@@ -28,7 +28,7 @@ void main() {
     await tester.pumpWidget(const ElitePlayLudoApp());
     await tester.pump();
 
-    await tester.tap(find.text('PLAY NOW'));
+    await tester.tap(find.byKey(const ValueKey('banner-ludo')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     await tester.tap(find.text('Pass & Play'));
