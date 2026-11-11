@@ -3,21 +3,45 @@ import 'dart:math';
 
 import 'package:elite_play_ludo/game/dice_game.dart';
 import 'package:elite_play_ludo/game/snl_controller.dart';
+import 'package:elite_play_ludo/game/snl_layout.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   SnlController game([List<int> seats = const [0, 1]]) =>
-      SnlController(seats: seats, speed: 0, random: Random(1));
+      SnlController(
+          seats: seats, speed: 0, random: Random(1), layout: SnlLayout.classic);
 
-  test('board is consistent: no square is both a foot/head and an end', () {
-    final starts = {...SnlController.ladders.keys, ...SnlController.snakes.keys};
-    final ends = {...SnlController.ladders.values, ...SnlController.snakes.values};
-    expect(starts.length, SnlController.ladders.length + SnlController.snakes.length);
+  void expectValid(SnlLayout l) {
+    final starts = {...l.ladders.keys, ...l.snakes.keys};
+    final ends = {...l.ladders.values, ...l.snakes.values};
+    expect(starts.length, l.ladders.length + l.snakes.length);
+    expect(ends.length, l.ladders.length + l.snakes.length);
     expect(starts.intersection(ends), isEmpty);
-    expect(starts.contains(1) || starts.contains(100), isFalse);
-    SnlController.ladders.forEach((a, b) => expect(b, greaterThan(a)));
-    SnlController.snakes.forEach((a, b) => expect(b, lessThan(a)));
+    expect({...starts, ...ends}.intersection({1, 100}), isEmpty);
+    l.ladders.forEach((a, b) => expect(b, greaterThan(a)));
+    l.snakes.forEach((a, b) => expect(b, lessThan(a)));
+  }
+
+  test('the classic board is consistent', () => expectValid(SnlLayout.classic));
+
+  test('random boards are always valid, full and different', () {
+    final seen = <String>{};
+    for (var seed = 0; seed < 300; seed++) {
+      final l = SnlLayout.random(Random(seed));
+      expectValid(l);
+      expect(identical(l, SnlLayout.classic), isFalse);
+      expect(l.ladders.length, 6);
+      expect(l.snakes.length, 7);
+      // A snake waits in the last row, and ladders never leave the board.
+      expect(l.snakes.keys.any((h) => h > 90), isTrue);
+      for (final p in l.pieces) {
+        expect(p.skin,
+            lessThan(p.snake ? SnlLayout.snakeSkins : SnlLayout.ladderSkins));
+      }
+      seen.add(l.pieces.map((p) => '${p.from}-${p.to}').join(','));
+    }
+    expect(seen.length, greaterThan(290));
   });
 
   test('a roll moves that many squares and passes the turn', () async {
@@ -65,6 +89,7 @@ void main() {
   test('a full bot match ends with everyone ranked', () async {
     final g = SnlController(
         seats: [3, 0, 1, 2], bots: {0, 1, 2, 3}, speed: 0, random: Random(4));
+    expect(g.layout, isNot(same(SnlLayout.classic)));
     final done = Completer<void>();
     g.addListener(() {
       if (g.phase == Phase.gameOver && !done.isCompleted) done.complete();

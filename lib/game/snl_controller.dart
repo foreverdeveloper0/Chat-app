@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/services.dart';
 
 import 'dice_game.dart';
+import 'snl_layout.dart';
 import 'sounds.dart';
 
 /// Snakes & Ladders on the classic 10x10 board.
@@ -20,8 +21,10 @@ class SnlController extends DiceGame {
     this.turnSeconds = 0,
     this.haptics = true,
     this.onSfx,
+    SnlLayout? layout,
   })  : assert(seats.length >= 2),
         _rng = random ?? Random(),
+        layout = layout ?? SnlLayout.random(random),
         current = seats.first {
     for (final p in seats) {
       lives[p] = DiceGame.maxLives;
@@ -31,20 +34,8 @@ class SnlController extends DiceGame {
 
   static const goal = 100;
 
-  /// Foot -> top.
-  static const ladders = {4: 25, 13: 46, 33: 49, 42: 63, 50: 69, 62: 81, 74: 92};
-
-  /// Head -> tail.
-  static const snakes = {
-    27: 5,
-    40: 3,
-    43: 18,
-    54: 31,
-    66: 45,
-    76: 58,
-    89: 53,
-    99: 41,
-  };
+  /// Where this match's ladders and snakes are.
+  final SnlLayout layout;
 
   @override
   final List<int> seats;
@@ -220,7 +211,7 @@ class SnlController extends DiceGame {
     }
 
     final here = position[p]!;
-    final up = ladders[here], down = snakes[here];
+    final up = layout.ladders[here], down = layout.snakes[here];
     if (up != null || down != null) {
       if (!await _wait(180)) return;
       final snake = down != null;

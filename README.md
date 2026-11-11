@@ -32,6 +32,7 @@ all need a server and are not built yet.
 Snakes & Ladders on a 10x10 board, opened from its tile or banner.
 
 - Pass & Play (2 to 4 players) or Play vs Computer (1 to 3 bots).
+- The ladders and snakes are placed afresh for every match (6 ladders, 7 snakes, never crossing), using the supplied board, ladder and snake artwork.
 - Everyone starts on square 1 and races to 100. A ladder's foot takes you
   up, a snake's head takes you down. A 6 earns another roll, and the last
   roll must land exactly on 100.

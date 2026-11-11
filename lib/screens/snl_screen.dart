@@ -156,8 +156,12 @@ class _SnlScreenState extends State<SnlScreen> with TickerProviderStateMixin {
               listenable: _game,
               builder: (context, _) => LayoutBuilder(
                 builder: (context, box) {
-                  final board = math.min(
-                      math.min(box.maxWidth, 520.0) - 16, box.maxHeight - 350);
+                  // The board is taller than it is wide.
+                  final boardH = math.min(box.maxHeight - 350,
+                      (math.min(box.maxWidth, 520.0) - 16) / snlAspect);
+                  final boardSize = Size(boardH * snlAspect, boardH);
+                  final board = math.min(box.maxWidth - 16,
+                      math.max(boardSize.width, PlayerPanel.width * 2 + 12));
                   return Stack(
                     children: [
                       Column(
@@ -174,7 +178,7 @@ class _SnlScreenState extends State<SnlScreen> with TickerProviderStateMixin {
                           ScaleTransition(
                             scale: CurvedAnimation(
                                 parent: _intro, curve: Curves.easeOutBack),
-                            child: _SnlBoard(size: board, game: _game),
+                            child: _SnlBoard(size: boardSize, game: _game),
                           ),
                           const SizedBox(height: 8),
                           _panelRow(board, 3, 2),
@@ -245,16 +249,14 @@ class _SnlScreenState extends State<SnlScreen> with TickerProviderStateMixin {
 /// a ladder or a snake rides along it.
 class _SnlBoard extends StatelessWidget {
   const _SnlBoard({required this.size, required this.game});
-  final double size;
+  final Size size;
   final SnlController game;
 
   @override
   Widget build(BuildContext context) {
-    final rim = size * snlRim;
-    final cell = (size - rim * 2) / 10;
-    final pw = cell * .62, ph = pw / pawnAspect;
-    Offset foot(Offset cells) =>
-        Offset(rim + cells.dx * cell, rim + cells.dy * cell + cell * .3);
+    final g = SnlGeometry(size);
+    final pw = g.cellW * .7, ph = pw / pawnAspect;
+    Offset foot(Offset centre) => centre + Offset(0, g.cellH * .3);
 
     // Pawns sharing a square stand side by side.
     final players = [
@@ -267,29 +269,22 @@ class _SnlBoard extends StatelessWidget {
           if (game.position[q] == game.position[p]) q,
       ];
       final i = here.indexOf(p), n = here.length;
-      return snlCentre(game.position[p]!) +
-          Offset((i - (n - 1) / 2) * (n > 2 ? .22 : .3), 0);
+      return foot(g.centre(game.position[p]!)) +
+          Offset((i - (n - 1) / 2) * g.cellW * (n > 2 ? .22 : .3), 0);
     }
 
     Widget pawn(int p) => Image.asset(pawnAssets[p],
         fit: BoxFit.fill, filterQuality: FilterQuality.medium);
     final slide = game.slide;
 
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * .04),
-        boxShadow: const [
-          BoxShadow(color: Color(0x88000010), blurRadius: 24, offset: Offset(0, 12)),
-        ],
-      ),
+    return SizedBox.fromSize(
+      size: size,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          const Positioned.fill(
+          Positioned.fill(
             child: RepaintBoundary(
-              child: CustomPaint(painter: SnlBoardPainter()),
+              child: SnlBoardView(layout: game.layout, size: size),
             ),
           ),
           for (final p in players)
@@ -298,8 +293,8 @@ class _SnlBoard extends StatelessWidget {
                 key: ValueKey('snl-pawn-$p'),
                 duration: const Duration(milliseconds: 170),
                 curve: Curves.easeOut,
-                left: foot(spot(p)).dx - pw / 2,
-                top: foot(spot(p)).dy - ph * .95,
+                left: spot(p).dx - pw / 2,
+                top: spot(p).dy - ph * .95,
                 width: pw,
                 height: ph,
                 child: _Hopper(square: game.position[p]!, child: pawn(p)),
@@ -312,8 +307,7 @@ class _SnlBoard extends StatelessWidget {
                 duration: const Duration(milliseconds: 850),
                 curve: Curves.easeInOut,
                 builder: (_, t, _) {
-                  final path =
-                      snlRide(slide.from, slide.to, snake: slide.snake);
+                  final path = g.ride(slide.from, slide.to);
                   final f = t * (path.length - 1);
                   final i = f.floor().clamp(0, path.length - 2);
                   final at =

@@ -614,13 +614,16 @@ class _SnakeLiveState extends State<_SnakeLive> {
   Widget build(BuildContext context) {
     final panel = widget.panel;
     final b = panel.edge;
-    final rim = b * snlRim, cell = (b - rim * 2) / 10;
-    final pw = cell * 1.05, ph = pw / pawnAspect;
+    // The tall board stands centred in the panel's square.
+    final size = Size(b * snlAspect, b);
+    final inset = Offset((b - size.width) / 2, 0);
+    final g = SnlGeometry(size);
+    final pw = g.cellW * 1.15, ph = pw / pawnAspect;
     final slide = _game.slide;
-    Offset foot(Offset cells) => panel
-        .map(Offset(rim + cells.dx * cell, rim + cells.dy * cell + cell * .25));
-    final corner = panel.map(Offset(b * .96, b * .9));
-    final dice = b * .3;
+    Offset foot(int square) =>
+        panel.map(inset + g.centre(square) + Offset(0, g.cellH * .3));
+    final corner = panel.map(Offset(b * .93, b * .9));
+    final dice = b * .28;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -629,10 +632,10 @@ class _SnakeLiveState extends State<_SnakeLive> {
           top: 0,
           child: Transform(
             transform: panel.matrix,
-            child: RepaintBoundary(
-              child: CustomPaint(
-                size: Size.square(b),
-                painter: const SnlBoardPainter(numbers: false),
+            child: Padding(
+              padding: EdgeInsets.only(left: inset.dx),
+              child: RepaintBoundary(
+                child: SnlBoardView(layout: _game.layout, size: size),
               ),
             ),
           ),
@@ -641,8 +644,8 @@ class _SnakeLiveState extends State<_SnakeLive> {
           () {
             // While riding, glide to the far end of the ladder or snake.
             final riding = slide?.player == p;
-            final at = foot(snlCentre(riding ? slide!.to : _game.position[p]!) +
-                Offset((p - 1.5) * .12, 0));
+            final at = foot(riding ? slide!.to : _game.position[p]!) +
+                Offset((p - 1.5) * g.cellW * .14, 0);
             return AnimatedPositioned(
               key: ValueKey(p),
               duration: Duration(milliseconds: riding ? 600 : 150),
@@ -656,7 +659,7 @@ class _SnakeLiveState extends State<_SnakeLive> {
             );
           }(),
         Positioned(
-          left: corner.dx - dice * .55,
+          left: corner.dx - dice * .5,
           top: corner.dy - dice * .5,
           child: _DemoDice(
             value: _game.dice,
