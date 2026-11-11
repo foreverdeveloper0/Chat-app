@@ -22,7 +22,7 @@ class CarromPiece {
 abstract final class Carrom {
   static const left = .110, right = .890, top = .1165, bottom = .8835;
   static const centre = Offset(.5, .5);
-  static const coinR = .0215, strikerR = .0285;
+  static const coinR = .0245, strikerR = .0315;
   static const pockets = [
     Offset(.1252, .1292),
     Offset(.8757, .1300),

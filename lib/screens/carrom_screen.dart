@@ -438,8 +438,7 @@ class _CarromScreenState extends State<CarromScreen>
                               top: at.dy * size - d / 2,
                               width: d,
                               height: d,
-                              child: Image.asset(_pieceAsset[p.kind]!,
-                                  filterQuality: FilterQuality.medium),
+                              child: _Puck(kind: p.kind),
                             );
                           }(),
                     ],
@@ -638,7 +637,7 @@ class _TablePainter extends CustomPainter {
     for (final p in game.pieces) {
       if (p.pocketed) continue;
       canvas.drawCircle(
-          (p.pos + const Offset(.004, .007)) * s, p.radius * s * 1.02, shadow);
+          (p.pos + Offset(.003, p.radius * .45)) * s, p.radius * s * 1.05, shadow);
     }
 
     // Light trail behind a moving striker.
@@ -877,6 +876,59 @@ class _TablePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TablePainter old) => true;
+}
+
+/// A piece seen from just above: its round face sitting on a short
+/// coloured side, so it reads as a thick disc rather than a flat sticker.
+class _Puck extends StatelessWidget {
+  const _Puck({required this.kind});
+  final PieceKind kind;
+
+  static const _side = {
+    PieceKind.white: (Color(0xFFC81E2A), Color(0xFF6E0A10)),
+    PieceKind.black: (Color(0xFF2A2A2E), Color(0xFF050506)),
+    PieceKind.queen: (Color(0xFFA0101C), Color(0xFF4A0208)),
+    PieceKind.striker: (Color(0xFF1F4FD6), Color(0xFF0A1F66)),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final (light, dark) = _side[kind]!;
+    return LayoutBuilder(builder: (context, box) {
+      final d = box.maxWidth, depth = d * .13;
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // The side band, peeking out below the face.
+          Positioned(
+            left: 0,
+            top: depth,
+            width: d,
+            height: d,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [dark, light, dark],
+                  stops: const [0, .45, 1],
+                ),
+                border: Border(
+                  bottom: BorderSide(
+                      color: const Color(0xFFE3B341), width: d * .025),
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: Image.asset(_pieceAsset[kind]!,
+                filterQuality: FilterQuality.medium),
+          ),
+        ],
+      );
+    });
+  }
 }
 
 /// Slides the striker along the baseline.
