@@ -24,15 +24,18 @@ Color rankColor(int rank) => switch (rank) {
 /// Full-page table background: the supplied artwork, slightly darkened
 /// in the middle so the board and docks stand out.
 class LudoBackdrop extends StatelessWidget {
-  const LudoBackdrop({super.key, required this.child});
+  const LudoBackdrop({super.key, required this.child, this.asset = gameBgAsset});
   final Widget child;
+
+  /// The table artwork; each game can bring its own.
+  final String asset;
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
         Positioned.fill(
-          child: Image.asset(gameBgAsset,
+          child: Image.asset(asset,
               fit: BoxFit.cover, filterQuality: FilterQuality.medium),
         ),
         const Positioned.fill(

@@ -6,30 +6,16 @@ import '../game/snl_layout.dart';
 
 const snlBoardAsset = 'assets/images/snl/board.png';
 
-/// Width / height of the board artwork.
-const snlAspect = 921 / 1302;
+/// Width / height of the board artwork (crown and frame included).
+const snlAspect = 941 / 1447;
 
 /// Where the 10x10 grid sits inside the artwork, as fractions of its size.
-const _gridLeft = .0239, _gridWidth = .9522, _gridTop = .020, _gridHeight = .963;
+const _gridLeft = .0319, _gridWidth = .9394, _gridTop = .0919, _gridHeight = .8528;
 
 /// Width / height of each upright ladder image.
 const _ladderAspect = [
   .335, .396, .215, .33, .272, .217, .272, //
   .311, .2, .33, .415, .396, .396, .261,
-];
-
-/// Each snake image lies head-left to tail-right: (height / width, head x,
-/// head-and-tail y, tail x), the last three as fractions of the image.
-const _snakes = [
-  (81 / 540, .045, .322, .994),
-  (68 / 540, .047, .365, .994),
-  (62 / 540, .047, .419, .992),
-  (59 / 540, .048, .441, .992),
-  (115 / 540, .041, .462, .986),
-  (139 / 540, .039, .314, .986),
-  (211 / 540, .096, .245, .988),
-  (250 / 540, .080, .282, .990),
-  (262 / 540, .085, .276, .983),
 ];
 
 /// Maps squares to pixels for a board drawn at [size].
@@ -112,8 +98,8 @@ class SnlBoardView extends StatelessWidget {
     final foot = g.centre(p.from), top = g.centre(p.to);
     final d = top - foot;
     // Rails run a little past both squares.
-    final h = d.distance + g.cellH * .3;
-    final w = math.min(h * _ladderAspect[p.skin], g.cellW * .62);
+    final h = d.distance + g.cellH * .36;
+    final w = math.min(h * _ladderAspect[p.skin], g.cellW * .66);
     final mid = (foot + top) / 2;
     return Positioned(
       left: mid.dx - w / 2,
@@ -121,6 +107,7 @@ class SnlBoardView extends StatelessWidget {
       width: w,
       height: h,
       child: Transform.rotate(
+        // Random boards only have upright ladders, so this is zero there.
         angle: math.atan2(d.dx, -d.dy),
         child: _shadowed(
           Image.asset('assets/images/snl/ladder${p.skin}.png',
@@ -130,27 +117,28 @@ class SnlBoardView extends StatelessWidget {
     );
   }
 
+  /// A snake is never rotated: its picture is scaled (and mirrored when it
+  /// runs the other way) so the head sits on its square and the tail tip on
+  /// the square it drops to.
   Widget _snake(SnlGeometry g, SnlPiece p) {
-    final (ratio, hx, hy, tx) = _snakes[p.skin];
-    final head = g.centre(p.from), tail = g.centre(p.to);
-    final d = tail - head;
-    final w = d.distance / (tx - hx);
-    // Long snakes keep their shape; none grows fatter than a square.
-    final h = math.min(w * ratio, g.cellW * .8);
-    final angle = math.atan2(d.dy, d.dx);
-    return Positioned(
-      left: head.dx - hx * w,
-      top: head.dy - hy * h,
-      width: w,
-      height: h,
-      child: Transform(
-        // Pivot on the head; mirror so the snake is never belly-up.
-        origin: Offset(hx * w, hy * h),
-        transform: Matrix4.identity()
-          ..rotateZ(angle)
-          ..scaleByDouble(1, angle.abs() > math.pi / 2 ? -1 : 1, 1, 1),
+    final skin = snakeSkins[p.skin % snakeSkins.length];
+    final (l, t, r, b) = snakeBox(skin, p.from, p.to);
+    final tailLeft = snlCell(p.to).x < snlCell(p.from).x ||
+        (snlCell(p.to).x == snlCell(p.from).x && p.from.isOdd);
+    // The pictures' tails all point right unless noted by their anchors.
+    final mirrored = tailLeft != (skin.tx < skin.hx);
+    final rect = Rect.fromLTRB(
+      size.width * _gridLeft + l * g.cellW,
+      size.height * _gridTop + t * g.cellH,
+      size.width * _gridLeft + r * g.cellW,
+      size.height * _gridTop + b * g.cellH,
+    );
+    return Positioned.fromRect(
+      rect: rect,
+      child: Transform.flip(
+        flipX: mirrored,
         child: _shadowed(
-          Image.asset('assets/images/snl/snake${p.skin}.png',
+          Image.asset('assets/images/snl/snake${p.skin % snakeSkins.length}.png',
               fit: BoxFit.fill, filterQuality: FilterQuality.medium),
         ),
       ),

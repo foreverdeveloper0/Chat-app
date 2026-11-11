@@ -25,22 +25,29 @@ void main() {
 
   test('the classic board is consistent', () => expectValid(SnlLayout.classic));
 
-  test('random boards are always valid, full and different', () {
+  test('random boards are always valid, tidy and different', () {
     final seen = <String>{};
     for (var seed = 0; seed < 300; seed++) {
       final l = SnlLayout.random(Random(seed));
       expectValid(l);
       expect(identical(l, SnlLayout.classic), isFalse);
       expect(l.ladders.length, 6);
-      expect(l.snakes.length, 7);
-      // A snake waits in the last row, and ladders never leave the board.
+      expect(l.snakes.length, 5);
       expect(l.snakes.keys.any((h) => h > 90), isTrue);
       for (final p in l.pieces) {
-        // Snakes stay off the outer columns so they cannot bulge outside.
-        final cols = snlCell(p.from).x + snlCell(p.to).x;
-        if (p.snake) expect(cols, inInclusiveRange(2, 16));
-        expect(p.skin,
-            lessThan(p.snake ? SnlLayout.snakeSkins : SnlLayout.ladderSkins));
+        if (p.snake) {
+          // The whole snake picture lies on the playing grid.
+          final (left, top, right, bottom) =
+              snakeBox(snakeSkins[p.skin], p.from, p.to);
+          expect(left, greaterThan(-.06));
+          expect(right, lessThan(10.06));
+          expect(top, greaterThan(-.11));
+          expect(bottom, lessThan(10.11));
+        } else {
+          // Ladders stand straight up one column.
+          expect(snlCell(p.from).x, snlCell(p.to).x);
+          expect(p.skin, lessThan(SnlLayout.ladderSkins));
+        }
       }
       seen.add(l.pieces.map((p) => '${p.from}-${p.to}').join(','));
     }

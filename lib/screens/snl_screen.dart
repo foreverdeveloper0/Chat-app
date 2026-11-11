@@ -151,6 +151,7 @@ class _SnlScreenState extends State<SnlScreen> with TickerProviderStateMixin {
       child: Scaffold(
         backgroundColor: AppColors.bgBottom,
         body: LudoBackdrop(
+          asset: 'assets/images/snl/bg.jpg',
           child: SafeArea(
             child: ListenableBuilder(
               listenable: _game,
