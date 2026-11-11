@@ -53,7 +53,20 @@ Top-down carrom with real collisions, cushions and pockets.
   with the next shot, and nobody can finish until the Queen is claimed.
   First side to pocket all nine coins wins.
 
-The other games on the hub (16 Ghuti, Car Racing, Fruit Cut, Poker)
+## 16 Ghuti
+
+Sholo Guti on the 37-point board (a 5x5 grid with a triangle at each end).
+
+- 1 vs Computer or 1 vs 1 on one phone. Each side starts with 16 pieces;
+  the middle row is empty.
+- Tap one of your pieces, then a lit point: green is a step along a line to
+  an empty neighbour, red is a jump straight over an enemy piece to the
+  empty point beyond, which takes it.
+- After a capture the same piece may keep jumping, or you can end the turn.
+- Take every enemy piece, or leave the other side with no move, to win.
+  Eighty moves in a row without a capture is a draw.
+
+The other games on the hub (Car Racing, Fruit Cut, Poker)
 are placeholders that say "coming soon".
 
 ## Run
