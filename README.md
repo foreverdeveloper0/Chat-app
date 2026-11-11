@@ -66,7 +66,23 @@ Sholo Guti on the 37-point board (a 5x5 grid with a triangle at each end).
 - Take every enemy piece, or leave the other side with no move, to win.
   Eighty moves in a row without a capture is a draw.
 
-The other games on the hub (Car Racing, Fruit Cut, Poker)
+## Car Racing
+
+A 3D-style circuit race seen from behind your car, drawn entirely in code.
+
+- Race 2, 3 or 4 cars (you against 1–3 computer cars) over 1, 2, 3 or 5
+  laps. The track has curves, hills, a start/finish arch, trees, palms,
+  rocks, street lamps and billboards beside the road.
+- The car speeds up by itself. Hold ◀ / ▶ to steer, BRAKE to slow down
+  (the brake lights come on) and NITRO for a burst of speed; the nitro
+  bar refills slowly. Arrow keys, A/D, space and shift also work.
+- Cones and barrels on the road slow you down; leaving the road slows
+  you, and hitting a tree or rock out there stops you dead. Cars bump
+  each other.
+- A 3-2-1 start light, live position, lap, time and speed, and a results
+  card at the end.
+
+The other games on the hub (Fruit Cut, Poker)
 are placeholders that say "coming soon".
 
 ## Run

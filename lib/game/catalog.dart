@@ -18,7 +18,7 @@ const games = [
   GameInfo('Snake & Ladder', 'snake', ready: true),
   GameInfo('Carrom', 'carrom', ready: true),
   GameInfo('16 Ghuti', 'ghuti', ready: true),
-  GameInfo('Car Racing', 'racing'),
+  GameInfo('Car Racing', 'racing', ready: true),
   GameInfo('Fruit Cut', 'fruit'),
   GameInfo('Poker', 'poker'),
 ];
