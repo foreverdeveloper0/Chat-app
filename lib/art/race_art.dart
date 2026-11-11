@@ -1,6 +1,8 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../game/race_game.dart';
 
@@ -11,9 +13,75 @@ const carColours = [
   (Color(0xFFFFC233), Color(0xFF9A6A00)),
 ];
 
-/// The race seen from behind the player's car: sky and hills, the road
-/// projected segment by segment, roadside props, rival cars and the
-/// player's car.
+/// The pictures the race is drawn with, decoded once and kept.
+abstract final class RaceSprites {
+  static final _names = [
+    for (var i = 0; i < 8; i++) 'tree$i',
+    for (var i = 0; i < 8; i++) 'bush$i',
+    for (var i = 0; i < 8; i++) 'flower$i',
+    for (var i = 0; i < 4; i++) 'rock$i',
+    for (var i = 0; i < 4; i++) 'car$i',
+    for (var i = 0; i < 4; i++) 'flag$i',
+    for (var i = 0; i < 3; i++) 'barrel$i',
+    'fence0',
+    'fence1',
+    'rail',
+    'lamp0',
+    'lamp1',
+    'chevron',
+    'sign80',
+    'warn',
+    'cone',
+    'tyres0',
+    'tyres1',
+    'hay',
+    'barrier0',
+    'barrier1',
+  ];
+  static final _images = <String, ui.Image>{};
+  static Future<void>? _loading;
+
+  static ui.Image? of(String name) => _images[name];
+
+  static Future<void> load() => _loading ??= Future.wait([
+    for (final n in _names)
+      () async {
+        try {
+          final data = await rootBundle.load('assets/images/race/$n.png');
+          final codec = await ui.instantiateImageCodec(
+            data.buffer.asUint8List(),
+          );
+          _images[n] = (await codec.getNextFrame()).image;
+        } catch (_) {
+          // A missing picture is simply not drawn.
+        }
+      }(),
+  ]);
+}
+
+/// Which picture a prop uses, how many world units one of its pixels
+/// covers, and how far off the ground it stands (signs sit on a pole).
+(String, double, double) _look(RoadProp p) => switch (p.kind) {
+  Prop.tree => ('tree${p.variant % 8}', 9.5, 0),
+  Prop.bush => ('bush${p.variant % 8}', 5, 0),
+  Prop.flower => ('flower${p.variant % 8}', 4, 0),
+  Prop.rock => ('rock${p.variant % 4}', 5, 0),
+  Prop.fence => (const ['fence0', 'fence1', 'rail'][p.variant % 3], 3.3, 0),
+  Prop.lamp => ('lamp${p.variant % 2}', 7.5, 0),
+  Prop.flag => ('flag${p.variant % 4}', 8, 0),
+  Prop.sign => (p.variant.isEven ? 'sign80' : 'warn', 6, 520),
+  Prop.chevron => ('chevron', 6, 0),
+  Prop.cone => ('cone', 3, 0),
+  Prop.barrel => ('barrel${p.variant % 3}', 3.6, 0),
+  Prop.tyres => ('tyres${p.variant % 2}', 3, 0),
+  Prop.barrier => ('barrier${p.variant % 2}', 3.6, 0),
+  Prop.hay => ('hay', 3.3, 0),
+  Prop.arch => ('', 0, 0),
+};
+
+/// The race seen from above and behind the player's car: sky and hills,
+/// the road projected segment by segment, roadside scenery, rival cars
+/// and the player's car.
 class RaceScenePainter extends CustomPainter {
   RaceScenePainter({
     required this.game,
@@ -28,11 +96,15 @@ class RaceScenePainter extends CustomPainter {
   final double Function() time;
   final double Function() shake;
 
-  static const _fog = Color(0xFF9FB7E8);
+  static const _haze = Color(0xFFCFEBF7);
 
   /// The horizon, and where the road under the player's car meets the
   /// screen, as fractions of the height: the car sits above the controls.
-  static const horizon = .4, ground = .8;
+  static const horizon = .3, ground = .8;
+
+  /// How much a car seen from above is squashed by the low camera.
+  static const _carSquash = .64;
+  static const _carWidth = 620.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -93,20 +165,24 @@ class RaceScenePainter extends CustomPainter {
       _segment(canvas, w, v);
     }
 
-    // Props and rival cars, far to near, each clipped by the road in front.
+    // Scenery and rival cars, far to near, each clipped by the road in
+    // front of it.
     final cars = <int, List<Racer>>{};
     for (final r in g.racers) {
       if (r.isPlayer) continue;
       cars.putIfAbsent(g.segmentAt(r.z).index, () => []).add(r);
     }
     for (final v in visible.reversed) {
+      final here = cars[v.seg.index];
+      if (v.seg.props.isEmpty && here == null) continue;
       canvas.save();
       canvas.clipRect(Rect.fromLTRB(0, 0, w, v.clip));
+      final unit = v.p1.$4 * w / 2;
       for (final prop in v.seg.props) {
-        final sx = v.p1.$1 + v.p1.$4 * prop.offset * RaceGame.roadWidth * w / 2;
-        _prop(canvas, prop.kind, Offset(sx, v.p1.$2), v.p1.$4 * w / 2, v.fog);
+        final sx = v.p1.$1 + unit * prop.offset * RaceGame.roadWidth;
+        _prop(canvas, w, prop, Offset(sx, v.p1.$2), unit, v.fog);
       }
-      for (final r in cars[v.seg.index] ?? const <Racer>[]) {
+      for (final r in here ?? const <Racer>[]) {
         final pct = (r.z % RaceGame.segLen) / RaceGame.segLen;
         final sc = v.p1.$4 + (v.p2.$4 - v.p1.$4) * pct;
         final sx =
@@ -114,38 +190,117 @@ class RaceScenePainter extends CustomPainter {
             (v.p2.$1 - v.p1.$1) * pct +
             sc * r.x * RaceGame.roadWidth * w / 2;
         final sy = v.p1.$2 + (v.p2.$2 - v.p1.$2) * pct;
-        paintCar(
-          canvas,
-          Offset(sx, sy),
-          640 * sc * w / 2,
-          r.colour,
-          steer: r.steer,
-          braking: r.braking,
-          boost: false,
-          time: t,
-        );
+        _car(canvas, Offset(sx, sy), _carWidth * sc * w / 2, r, t, false);
       }
       canvas.restore();
     }
 
     // The player's car, bobbing a little with speed and more off-road.
     final pct = p.speed / RaceGame.maxSpeed;
-    final rough = p.x.abs() > 1 ? 4.0 : 1.2;
-    final bob = math.sin(t * 40) * rough * pct;
-    final carW = w * .36;
-    paintCar(
-      canvas,
-      Offset(w / 2, h * ground + bob),
-      carW,
-      p.colour,
-      steer: p.steer,
-      braking: p.braking,
-      boost: p.boosting,
-      time: t,
-    );
+    final off = p.x.abs() > 1;
+    final bob = math.sin(t * 40) * (off ? 3.5 : 1) * pct;
+    final carW = _carWidth / RaceGame.cameraHeight * w / 2;
+    final at = Offset(w / 2, h * ground + bob);
+    if (off && pct > .05) _dust(canvas, at, carW, t);
+    _car(canvas, at, carW, p, t, p.boosting);
 
     if (p.boosting) _speedLines(canvas, size, t);
     canvas.restore();
+  }
+
+  void _car(
+    Canvas canvas,
+    Offset at,
+    double width,
+    Racer r,
+    double t,
+    bool boost,
+  ) {
+    if (width < 2) return;
+    final img = RaceSprites.of('car${r.colour % 4}');
+    if (img == null) {
+      paintCar(
+        canvas,
+        at,
+        width,
+        r.colour,
+        steer: r.steer,
+        braking: r.braking,
+        boost: boost,
+        time: t,
+      );
+      return;
+    }
+    final height = width * img.height / img.width * _carSquash;
+    final dst = Rect.fromLTWH(-width / 2, -height, width, height);
+    canvas.save();
+    canvas.translate(at.dx, at.dy);
+    // Turn about the middle of the car.
+    canvas.translate(0, -height / 2);
+    canvas.rotate(r.steer * .09);
+    canvas.translate(0, height / 2);
+    if (boost) {
+      for (final s in [-1.0, 1.0]) {
+        final e = Offset(s * width * .17, -height * .06);
+        final len = height * (.5 + .12 * math.sin(t * 60 + s));
+        final flame = Path()
+          ..moveTo(e.dx - width * .07, e.dy)
+          ..quadraticBezierTo(e.dx, e.dy + len * 1.6, e.dx + width * .07, e.dy)
+          ..close();
+        canvas.drawPath(
+          flame,
+          Paint()
+            ..color = const Color(0xCC3FA9FF)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * .04),
+        );
+        canvas.drawPath(
+          Path()
+            ..moveTo(e.dx - width * .035, e.dy)
+            ..quadraticBezierTo(e.dx, e.dy + len, e.dx + width * .035, e.dy)
+            ..close(),
+          Paint()..color = const Color(0xFFEFFBFF),
+        );
+      }
+    }
+    canvas.drawImageRect(
+      img,
+      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+      dst,
+      Paint()..filterQuality = FilterQuality.medium,
+    );
+    if (r.braking) {
+      for (final s in [-1.0, 1.0]) {
+        final c = Offset(s * width * .27, -height * .12);
+        canvas.drawOval(
+          Rect.fromCenter(center: c, width: width * .3, height: height * .14),
+          Paint()
+            ..color = const Color(0xDDFF2A2A)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * .05),
+        );
+        canvas.drawOval(
+          Rect.fromCenter(center: c, width: width * .14, height: height * .05),
+          Paint()..color = const Color(0xFFFFD0D0),
+        );
+      }
+    }
+    canvas.restore();
+  }
+
+  void _dust(Canvas canvas, Offset at, double carW, double t) {
+    final rnd = math.Random((t * 20).floor());
+    for (var i = 0; i < 9; i++) {
+      final c =
+          at +
+          Offset(
+            (rnd.nextDouble() - .5) * carW * 1.3,
+            rnd.nextDouble() * carW * .35,
+          );
+      canvas.drawCircle(
+        c,
+        carW * (.08 + rnd.nextDouble() * .12),
+        Paint()..color = const Color(0x66C9A46B),
+      );
+    }
   }
 
   void _background(Canvas canvas, Size size, double off) {
@@ -158,27 +313,51 @@ class RaceScenePainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF1B2A8A), Color(0xFF5B74D8), Color(0xFFFFB27A)],
+          colors: [Color(0xFF1E7BE6), Color(0xFF58B4F5), Color(0xFFC9ECFB)],
           stops: [0, .6, 1],
         ).createShader(sky),
     );
-    // Sun.
-    final sun = Offset(w * .7 - off * w * .05 % w, hz * .55);
-    canvas.drawCircle(
-      sun,
-      w * .2,
-      Paint()
-        ..color = const Color(0x33FFE6A8)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30),
-    );
-    canvas.drawCircle(sun, w * .08, Paint()..color = const Color(0xFFFFE9B0));
+    // Puffy clouds drifting with the bends.
+    final cloud = Paint()..color = Colors.white;
+    final shade = Paint()..color = const Color(0xFFDDEEFA);
+    const clouds = [
+      (.12, .22, 1.0),
+      (.48, .1, .7),
+      (.8, .3, 1.15),
+      (1.15, .16, .85),
+    ];
+    for (final (cx, cy, sc) in clouds) {
+      final bx = ((cx - off * .08) % 1.4) * w - w * .2;
+      final by = hz * (cy + .25), r = w * .05 * sc;
+      for (final (dx, dy, k) in const [
+        (-1.5, .3, .8),
+        (-.6, -.2, 1.1),
+        (.4, -.45, 1.25),
+        (1.3, 0.0, 1.0),
+        (2.1, .35, .7),
+      ]) {
+        canvas.drawCircle(
+          Offset(bx + dx * r, by + dy * r + r * .25),
+          r * k,
+          shade,
+        );
+        canvas.drawCircle(Offset(bx + dx * r, by + dy * r), r * k, cloud);
+      }
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(bx - 2.2 * r, by + r * .2, bx + 2.8 * r, by + r * 1.1),
+          Radius.circular(r),
+        ),
+        cloud,
+      );
+    }
 
     void ridge(
       double baseY,
       double amp,
       double freq,
       double par,
-      Color c,
+      Paint paint,
       int seed,
     ) {
       final path = Path()..moveTo(0, h);
@@ -195,328 +374,220 @@ class RaceScenePainter extends CustomPainter {
       path
         ..lineTo(w, h)
         ..close();
-      canvas.drawPath(path, Paint()..color = c);
+      canvas.drawPath(path, paint);
     }
 
-    ridge(hz - h * .01, h * .12, 6, .05, const Color(0xFF7A86C8), 1);
-    ridge(hz + h * .005, h * .07, 11, .1, const Color(0xFF4E5BA8), 3);
-    // City skyline in between.
-    final city = Paint()..color = const Color(0xFF3A3F86);
-    final rnd = math.Random(4);
-    for (var i = 0; i < 40; i++) {
-      final bx = ((i * 37 + rnd.nextInt(20)) - off * w * .15) % (w + 60) - 30;
-      final bh = h * (.03 + rnd.nextDouble() * .06);
-      canvas.drawRect(
-        Rect.fromLTWH(bx, hz + h * .005 - bh, 14 + rnd.nextDouble() * 18, bh),
-        city,
-      );
+    Paint grad(Color a, Color b) => Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [a, b],
+      ).createShader(Rect.fromLTRB(0, hz - h * .16, w, hz));
+    ridge(
+      hz,
+      h * .15,
+      5,
+      .05,
+      grad(const Color(0xFF5FA6C9), const Color(0xFF8FCFD9)),
+      1,
+    );
+    ridge(
+      hz + h * .004,
+      h * .09,
+      9,
+      .1,
+      grad(const Color(0xFF3F9A4E), const Color(0xFF7CC85A)),
+      3,
+    );
+    // A far line of tree tops.
+    final trees = Paint()..color = const Color(0xFF2F8A3A);
+    final rnd = math.Random(7);
+    for (var i = 0; i < 46; i++) {
+      final bx = ((i * 31 + rnd.nextInt(18)) - off * w * .16) % (w + 60) - 30;
+      final r = h * (.008 + rnd.nextDouble() * .012);
+      canvas.drawCircle(Offset(bx, hz - r * .5), r, trees);
     }
     // Far grass behind the end of the road.
     canvas.drawRect(
       Rect.fromLTWH(0, hz, w, h - hz),
-      Paint()..color = Color.lerp(const Color(0xFF2E9E45), _fog, .55)!,
+      Paint()..color = Color.lerp(const Color(0xFF66C22E), _haze, .35)!,
     );
   }
 
-  Color _fogged(Color c, double f) =>
-      Color.lerp(c, _fog, (f * f * .9).clamp(0.0, .9))!;
+  Color _hazed(Color c, double f) =>
+      Color.lerp(c, _haze, (f * f * .55).clamp(0.0, .55))!;
 
   void _segment(Canvas canvas, double w, _Proj v) {
     final (x1, y1, w1, _) = v.p1;
     final (x2, y2, w2, _) = v.p2;
-    final dark = (v.seg.index ~/ RaceGame.rumbleLen).isEven;
+    final band = v.seg.index ~/ RaceGame.rumbleLen;
+    final dark = band.isEven;
     final f = v.fog;
+    // No anti-aliasing: it would leave hairline seams between segments.
+    Paint ink(Color c) => Paint()
+      ..color = _hazed(c, f)
+      ..isAntiAlias = false;
     canvas.drawRect(
       Rect.fromLTRB(0, y2, w, y1 + 1),
-      Paint()
-        ..color = _fogged(
-          dark ? const Color(0xFF3FAF52) : const Color(0xFF34A048),
-          f,
-        ),
+      ink(dark ? const Color(0xFF6CC72F) : const Color(0xFF61BA29)),
     );
     Path quad(double a1, double a2, double b1, double b2) => Path()
-      ..moveTo(a1, y1 + .6)
-      ..lineTo(a2, y1 + .6)
+      ..moveTo(a1, y1 + 1)
+      ..lineTo(a2, y1 + 1)
       ..lineTo(b2, y2)
       ..lineTo(b1, y2)
       ..close();
-    final r1 = w1 / 6, r2 = w2 / 6;
-    canvas.drawPath(
-      quad(x1 - w1 - r1, x1 + w1 + r1, x2 - w2 - r2, x2 + w2 + r2),
-      Paint()
-        ..color = _fogged(
-          dark ? const Color(0xFFE8E8E8) : const Color(0xFFD62828),
-          f,
-        ),
+    // A strip between two fractions of the road's half-width.
+    void strip(double a, double b, Color c) => canvas.drawPath(
+      quad(x1 + w1 * a, x1 + w1 * b, x2 + w2 * a, x2 + w2 * b),
+      ink(c),
     );
-    final start = v.seg.index < 2;
-    canvas.drawPath(
-      quad(x1 - w1, x1 + w1, x2 - w2, x2 + w2),
-      Paint()
-        ..color = _fogged(
-          dark ? const Color(0xFF5A5A63) : const Color(0xFF55555E),
-          f,
-        ),
+
+    // Kerbs: a dark outer lip, then chunky red and white blocks.
+    strip(-1.2, 1.2, dark ? const Color(0xFF4E9A22) : const Color(0xFF468D1E));
+    strip(
+      -1.16,
+      1.16,
+      dark ? const Color(0xFFB8BCC4) : const Color(0xFFA01818),
     );
-    if (start) {
+    strip(
+      -1.14,
+      1.14,
+      dark ? const Color(0xFFF7F7F7) : const Color(0xFFE02A2A),
+    );
+    // Tarmac.
+    strip(-1, 1, dark ? const Color(0xFF3C3E48) : const Color(0xFF393B44));
+    if (v.seg.index < 2) {
       // Chequered start and finish line.
       const cells = 12;
       for (var c = 0; c < cells; c++) {
-        final a = c / cells, b = (c + 1) / cells;
         if ((c + v.seg.index).isEven) continue;
-        canvas.drawPath(
-          quad(
-            x1 - w1 + 2 * w1 * a,
-            x1 - w1 + 2 * w1 * b,
-            x2 - w2 + 2 * w2 * a,
-            x2 - w2 + 2 * w2 * b,
-          ),
-          Paint()..color = _fogged(Colors.white, f),
-        );
+        strip(-1 + 2 * c / cells, -1 + 2 * (c + 1) / cells, Colors.white);
       }
-    } else if (dark) {
-      final l1 = w1 / 32, l2 = w2 / 32;
+      return;
+    }
+    // Solid white lines along both edges, dashes between the lanes.
+    strip(-.95, -.915, const Color(0xFFF4F4F4));
+    strip(.915, .95, const Color(0xFFF4F4F4));
+    if (band % 3 != 2) {
       for (var lane = 1; lane < RaceGame.lanes; lane++) {
         final a = -1 + lane * 2 / RaceGame.lanes;
-        canvas.drawPath(
-          quad(
-            x1 + w1 * a - l1,
-            x1 + w1 * a + l1,
-            x2 + w2 * a - l2,
-            x2 + w2 * a + l2,
-          ),
-          Paint()..color = _fogged(const Color(0xFFF2F2F2), f),
-        );
+        strip(a - .02, a + .02, const Color(0xFFF4F4F4));
       }
     }
   }
 
-  void _prop(Canvas canvas, Prop kind, Offset at, double unit, double fog) {
+  void _prop(
+    Canvas canvas,
+    double w,
+    RoadProp prop,
+    Offset at,
+    double unit,
+    double fog,
+  ) {
     // unit: screen pixels per world unit.
     double u(double world) => world * unit;
-    switch (kind) {
-      case Prop.tree:
-        canvas.drawRect(
-          Rect.fromCenter(
-            center: at - Offset(0, u(220)),
-            width: u(110),
-            height: u(440),
+    if (prop.kind == Prop.arch) {
+      _arch(canvas, at, u);
+      return;
+    }
+    final (name, perPixel, lift) = _look(prop);
+    final img = RaceSprites.of(name);
+    if (img == null) return;
+    final width = u(img.width * perPixel);
+    if (width < 1.5) return;
+    final height = width * img.height / img.width;
+    final dst = Rect.fromLTWH(
+      at.dx - width / 2,
+      at.dy - height - u(lift),
+      width,
+      height,
+    );
+    if (dst.right < 0 || dst.left > w) return;
+    // Fade in out of the haze instead of popping up.
+    final alpha = (1 - (fog - .7) / .3).clamp(0.0, 1.0);
+    if (alpha <= 0) return;
+    if (alpha == 1 && prop.kind != Prop.flower) {
+      canvas.drawOval(
+        Rect.fromCenter(center: at, width: width * .8, height: width * .12),
+        Paint()..color = const Color(0x38000000),
+      );
+    }
+    if (lift > 0) {
+      canvas.drawRect(
+        Rect.fromLTWH(at.dx - u(22), at.dy - u(lift) - 1, u(44), u(lift) + 1),
+        Paint()..color = const Color(0xFF7D8494),
+      );
+    }
+    final paint = Paint()
+      ..filterQuality = FilterQuality.low
+      ..color = Color.fromRGBO(255, 255, 255, alpha);
+    final src = Rect.fromLTWH(
+      0,
+      0,
+      img.width.toDouble(),
+      img.height.toDouble(),
+    );
+    // Lamps, flags and arrows on the right lean back over the road.
+    final flip =
+        prop.offset > 0 &&
+        (prop.kind == Prop.lamp ||
+            prop.kind == Prop.flag ||
+            prop.kind == Prop.chevron);
+    if (flip) {
+      canvas.save();
+      canvas.translate(at.dx * 2, 0);
+      canvas.scale(-1, 1);
+      canvas.drawImageRect(img, src, dst, paint);
+      canvas.restore();
+    } else {
+      canvas.drawImageRect(img, src, dst, paint);
+    }
+  }
+
+  void _arch(Canvas canvas, Offset at, double Function(double) u) {
+    final half = RaceGame.roadWidth * 1.25;
+    final pillar = Paint()..color = const Color(0xFF2A2F78);
+    for (final sx in [-1.0, 1.0]) {
+      canvas.drawRect(
+        Rect.fromLTWH(
+          at.dx + u(half) * sx - u(110),
+          at.dy - u(2200),
+          u(220),
+          u(2200),
+        ),
+        pillar,
+      );
+    }
+    final banner = Rect.fromLTRB(
+      at.dx - u(half) - u(110),
+      at.dy - u(2400),
+      at.dx + u(half) + u(110),
+      at.dy - u(1900),
+    );
+    canvas.drawRect(
+      banner,
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [Color(0xFFFFF1B8), Color(0xFFE3B341), Color(0xFFB8862B)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ).createShader(banner),
+    );
+    if (banner.width > 60) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: 'START  •  FINISH',
+          style: TextStyle(
+            fontFamily: 'Fredoka',
+            fontWeight: FontWeight.w700,
+            fontSize: banner.height * .55,
+            color: const Color(0xFF2A1F7A),
           ),
-          Paint()..color = const Color(0xFF6B3F1D),
-        );
-        for (final (dx, dy, r) in const [
-          (0.0, 760.0, 360.0),
-          (-210.0, 560.0, 270.0),
-          (210.0, 560.0, 270.0),
-        ]) {
-          final c = at + Offset(u(dx), -u(dy));
-          canvas.drawCircle(
-            c,
-            u(r),
-            Paint()
-              ..shader = RadialGradient(
-                center: const Alignment(-.3, -.4),
-                colors: const [Color(0xFF6FE07A), Color(0xFF1E8A3A)],
-              ).createShader(Rect.fromCircle(center: c, radius: u(r))),
-          );
-        }
-      case Prop.palm:
-        final top = at - Offset(u(80), u(1200));
-        canvas.drawPath(
-          Path()
-            ..moveTo(at.dx - u(50), at.dy)
-            ..quadraticBezierTo(at.dx + u(90), at.dy - u(600), top.dx, top.dy)
-            ..lineTo(top.dx + u(60), top.dy)
-            ..quadraticBezierTo(
-              at.dx + u(150),
-              at.dy - u(600),
-              at.dx + u(50),
-              at.dy,
-            )
-            ..close(),
-          Paint()..color = const Color(0xFF9A6A3A),
-        );
-        for (var k = 0; k < 6; k++) {
-          final a = -math.pi / 2 + (k - 2.5) * .55;
-          final tip =
-              top + Offset(math.cos(a) * u(520), math.sin(a) * u(260) + u(170));
-          canvas.drawPath(
-            Path()
-              ..moveTo(top.dx, top.dy)
-              ..quadraticBezierTo(
-                (top.dx + tip.dx) / 2,
-                top.dy - u(160),
-                tip.dx,
-                tip.dy,
-              )
-              ..quadraticBezierTo(
-                (top.dx + tip.dx) / 2,
-                top.dy - u(40),
-                top.dx,
-                top.dy,
-              ),
-            Paint()..color = const Color(0xFF2FB34E),
-          );
-        }
-      case Prop.billboard:
-        final post = Paint()..color = const Color(0xFF555A66);
-        canvas.drawRect(
-          Rect.fromLTWH(at.dx - u(500), at.dy - u(700), u(60), u(700)),
-          post,
-        );
-        canvas.drawRect(
-          Rect.fromLTWH(at.dx + u(440), at.dy - u(700), u(60), u(700)),
-          post,
-        );
-        final board = Rect.fromCenter(
-          center: at - Offset(0, u(1050)),
-          width: u(1500),
-          height: u(700),
-        );
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(board, Radius.circular(u(60))),
-          Paint()..color = const Color(0xFFE3B341),
-        );
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(board.deflate(u(45)), Radius.circular(u(40))),
-          Paint()
-            ..shader = const LinearGradient(
-              colors: [Color(0xFF2A1F7A), Color(0xFF6A2BC8)],
-            ).createShader(board),
-        );
-        if (board.width > 40) {
-          final tp = TextPainter(
-            text: TextSpan(
-              text: 'ELITE PLAY BD',
-              style: TextStyle(
-                fontFamily: 'Fredoka',
-                fontWeight: FontWeight.w700,
-                fontSize: board.height * .3,
-                color: const Color(0xFFFFE28A),
-              ),
-            ),
-            textDirection: TextDirection.ltr,
-          )..layout(maxWidth: board.width);
-          tp.paint(canvas, board.center - Offset(tp.width / 2, tp.height / 2));
-        }
-      case Prop.lamp:
-        final pole = Paint()..color = const Color(0xFF8A8FA0);
-        canvas.drawRect(
-          Rect.fromLTWH(at.dx - u(30), at.dy - u(1700), u(60), u(1700)),
-          pole,
-        );
-        final dir = at.dx < 0 ? 1.0 : -1.0;
-        final head = at + Offset(dir * u(300), -u(1660));
-        canvas.drawLine(
-          at - Offset(0, u(1660)),
-          head,
-          pole..strokeWidth = u(50),
-        );
-        canvas.drawCircle(
-          head,
-          u(180),
-          Paint()
-            ..color = const Color(0x55FFF1B8)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, u(120) + 1),
-        );
-        canvas.drawOval(
-          Rect.fromCenter(center: head, width: u(200), height: u(80)),
-          Paint()..color = const Color(0xFFFFF4CC),
-        );
-      case Prop.rock:
-        canvas.drawPath(
-          Path()
-            ..moveTo(at.dx - u(320), at.dy)
-            ..lineTo(at.dx - u(240), at.dy - u(280))
-            ..lineTo(at.dx - u(40), at.dy - u(380))
-            ..lineTo(at.dx + u(200), at.dy - u(300))
-            ..lineTo(at.dx + u(320), at.dy)
-            ..close(),
-          Paint()..color = const Color(0xFF8C8C96),
-        );
-      case Prop.cone:
-        final base = Rect.fromCenter(
-          center: at - Offset(0, u(15)),
-          width: u(200),
-          height: u(30),
-        );
-        canvas.drawRect(base, Paint()..color = const Color(0xFFE85A00));
-        canvas.drawPath(
-          Path()
-            ..moveTo(at.dx - u(70), at.dy - u(30))
-            ..lineTo(at.dx + u(70), at.dy - u(30))
-            ..lineTo(at.dx + u(12), at.dy - u(300))
-            ..lineTo(at.dx - u(12), at.dy - u(300))
-            ..close(),
-          Paint()..color = const Color(0xFFFF7A1A),
-        );
-        canvas.drawRect(
-          Rect.fromCenter(
-            center: at - Offset(0, u(160)),
-            width: u(95),
-            height: u(45),
-          ),
-          Paint()..color = Colors.white,
-        );
-      case Prop.barrel:
-        final r = Rect.fromLTWH(at.dx - u(120), at.dy - u(340), u(240), u(340));
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(r, Radius.circular(u(40))),
-          Paint()
-            ..shader = const LinearGradient(
-              colors: [Color(0xFF8E0B0B), Color(0xFFFF3B3B), Color(0xFF8E0B0B)],
-            ).createShader(r),
-        );
-        for (final y in [.3, .7]) {
-          canvas.drawRect(
-            Rect.fromLTWH(r.left, r.top + r.height * y - u(20), r.width, u(40)),
-            Paint()..color = Colors.white,
-          );
-        }
-      case Prop.arch:
-        final half = RaceGame.roadWidth * 1.25;
-        final pillar = Paint()..color = const Color(0xFF2A2F78);
-        for (final sx in [-1.0, 1.0]) {
-          canvas.drawRect(
-            Rect.fromLTWH(
-              at.dx + u(half) * sx - u(110),
-              at.dy - u(2200),
-              u(220),
-              u(2200),
-            ),
-            pillar,
-          );
-        }
-        final banner = Rect.fromLTRB(
-          at.dx - u(half) - u(110),
-          at.dy - u(2400),
-          at.dx + u(half) + u(110),
-          at.dy - u(1900),
-        );
-        canvas.drawRect(
-          banner,
-          Paint()
-            ..shader = const LinearGradient(
-              colors: [Color(0xFFFFF1B8), Color(0xFFE3B341), Color(0xFFB8862B)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ).createShader(banner),
-        );
-        if (banner.width > 60) {
-          final tp = TextPainter(
-            text: TextSpan(
-              text: 'START  •  FINISH',
-              style: TextStyle(
-                fontFamily: 'Fredoka',
-                fontWeight: FontWeight.w700,
-                fontSize: banner.height * .55,
-                color: const Color(0xFF2A1F7A),
-              ),
-            ),
-            textDirection: TextDirection.ltr,
-          )..layout(maxWidth: banner.width);
-          tp.paint(canvas, banner.center - Offset(tp.width / 2, tp.height / 2));
-        }
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: banner.width);
+      tp.paint(canvas, banner.center - Offset(tp.width / 2, tp.height / 2));
     }
   }
 

@@ -1,25 +1,69 @@
 import 'dart:math';
 
 /// Things standing beside (or on) the road.
-enum Prop { tree, palm, billboard, lamp, rock, cone, barrel, arch }
+enum Prop {
+  tree,
+  bush,
+  flower,
+  rock,
+  fence,
+  lamp,
+  flag,
+  sign,
+  chevron,
+  cone,
+  barrel,
+  tyres,
+  barrier,
+  hay,
+  arch,
+}
 
 class RoadProp {
-  const RoadProp(this.kind, this.offset);
+  const RoadProp(this.kind, this.offset, [this.variant = 0]);
   final Prop kind;
 
   /// Across the road: -1 and 1 are its edges.
   final double offset;
 
+  /// Which picture of this kind to draw.
+  final int variant;
+
   /// Props on the tarmac get in the way; the rest only matter off-road.
-  bool get onRoad => kind == Prop.cone || kind == Prop.barrel;
+  bool get onRoad => switch (kind) {
+    Prop.cone || Prop.barrel || Prop.tyres || Prop.barrier || Prop.hay => true,
+    _ => false,
+  };
+
+  /// Whether driving into it off the road is a crash. Bushes, flowers and
+  /// flags are soft.
+  bool get solid => switch (kind) {
+    Prop.tree ||
+    Prop.rock ||
+    Prop.fence ||
+    Prop.lamp ||
+    Prop.sign ||
+    Prop.chevron => true,
+    _ => false,
+  };
+
+  /// A heavy thing on the road costs more speed than a light one.
+  bool get heavy =>
+      kind == Prop.barrel || kind == Prop.barrier || kind == Prop.hay;
 
   /// Half the prop's width, in road half-widths, for collisions.
   double get halfWidth => switch (kind) {
-    Prop.cone => .08,
-    Prop.barrel => .1,
-    Prop.billboard => .45,
-    Prop.arch => 0,
-    _ => .22,
+    Prop.cone => .07,
+    Prop.barrel => .09,
+    Prop.tyres => .11,
+    Prop.hay => .13,
+    Prop.barrier => .17,
+    Prop.tree => .2,
+    Prop.rock => .2,
+    Prop.fence => .22,
+    Prop.lamp => .06,
+    Prop.sign || Prop.chevron => .12,
+    _ => 0,
   };
 }
 
@@ -101,7 +145,7 @@ class RaceGame {
   static const rumbleLen = 3;
   static const roadWidth = 2000.0;
   static const lanes = 3;
-  static const cameraHeight = 1000.0;
+  static const cameraHeight = 1300.0;
   static const cameraDepth = .84; // 1 / tan(fov / 2) for a 100 degree view
   static const playerZ = cameraHeight * cameraDepth;
   static const drawDistance = 260;
@@ -180,33 +224,68 @@ class RaceGame {
     final rest = _lastY();
     _road(30, 20, 30, -2, -rest / segLen);
 
-    // Props.
+    // Scenery and obstacles.
+    final n = segments.length;
     for (final s in segments) {
       final i = s.index;
       if (i == 2) {
         // The start and finish arch, just past the line.
         s.props.add(const RoadProp(Prop.arch, 0));
       }
-      if (i % 9 == 0) {
-        s.props.add(RoadProp(Prop.lamp, i.isEven ? -1.15 : 1.15));
+      if (i == 0 || i == 5) {
+        s.props.add(const RoadProp(Prop.flag, -1.3));
+        s.props.add(const RoadProp(Prop.flag, 1.3));
+      } else if (i % 45 == 20) {
+        s.props.add(RoadProp(Prop.flag, i.isEven ? -1.3 : 1.3, 1 + i % 3));
       }
-      if (i % 3 == 0 && rng.nextDouble() < .75) {
-        final side = rng.nextBool() ? -1 : 1;
-        final kind = [
-          Prop.tree,
-          Prop.tree,
-          Prop.palm,
-          Prop.rock,
-        ][rng.nextInt(4)];
-        s.props.add(RoadProp(kind, side * (1.4 + rng.nextDouble() * 2.6)));
+      // Fences run along some stretches, a different kind on each.
+      final zone = i ~/ 50;
+      if (i % 3 == 0 && zone % 3 != 2 && i > 8) {
+        s.props.add(RoadProp(Prop.fence, -1.42, zone % 3 + zone % 2));
+        s.props.add(RoadProp(Prop.fence, 1.42, zone % 3 + zone % 2));
       }
-      if (i % 60 == 30) {
-        s.props.add(RoadProp(Prop.billboard, i % 120 == 30 ? -1.6 : 1.6));
+      if (i % 12 == 6) {
+        s.props.add(RoadProp(Prop.lamp, i % 24 == 6 ? -1.25 : 1.25, zone % 2));
       }
-      // A few cones and barrels on the tarmac, never near the start.
-      if (i > 80 && i < segments.length - 30 && i % 37 == 0) {
+      // Arrows on the outside of the sharper bends.
+      if (s.curve.abs() > 2.5 && i % 6 == 0) {
+        s.props.add(RoadProp(Prop.chevron, s.curve > 0 ? -1.3 : 1.3));
+      } else if (i % 90 == 45) {
+        s.props.add(RoadProp(Prop.sign, i.isEven ? -1.3 : 1.3, rng.nextInt(2)));
+      }
+      for (final side in const [-1, 1]) {
+        if (i.isEven && rng.nextDouble() < .55) {
+          s.props.add(RoadProp(
+              Prop.tree, side * (1.9 + rng.nextDouble() * 3.4), rng.nextInt(8)));
+        }
+        if (rng.nextDouble() < .35) {
+          s.props.add(RoadProp(
+              Prop.bush, side * (1.6 + rng.nextDouble() * 2.2), rng.nextInt(8)));
+        }
+        if (rng.nextDouble() < .45) {
+          s.props.add(RoadProp(Prop.flower,
+              side * (1.18 + rng.nextDouble() * 1.6), rng.nextInt(8)));
+        }
+        if (rng.nextDouble() < .06) {
+          s.props.add(RoadProp(
+              Prop.rock, side * (1.7 + rng.nextDouble() * 2), rng.nextInt(4)));
+        }
+      }
+      // Things on the tarmac to steer round, never near the start.
+      if (i > 80 && i < n - 30 && i % 37 == 0) {
         final lane = (rng.nextInt(3) - 1) * .62;
-        s.props.add(RoadProp(rng.nextBool() ? Prop.cone : Prop.barrel, lane));
+        final kind = const [
+          Prop.cone,
+          Prop.cone,
+          Prop.barrel,
+          Prop.tyres,
+          Prop.barrier,
+          Prop.hay,
+        ][rng.nextInt(6)];
+        s.props.add(RoadProp(kind, lane, rng.nextInt(3)));
+        if (kind == Prop.cone) {
+          s.props.add(RoadProp(kind, lane + (lane > 0 ? -.2 : .2)));
+        }
       }
     }
   }
@@ -296,7 +375,7 @@ class RaceGame {
       if (p.speed > offRoadLimit) p.speed += offRoadDecel * dt;
       // Things off the road stop you dead.
       for (final prop in seg.props) {
-        if (prop.onRoad || prop.kind == Prop.arch) continue;
+        if (!prop.solid) continue;
         if ((p.x - prop.offset).abs() < prop.halfWidth + carHalfWidth) {
           p.speed = maxSpeed / 6;
           p.z = _wrap(segmentAt(p.z).index * segLen);
@@ -311,8 +390,8 @@ class RaceGame {
       if (!prop.onRoad) continue;
       if ((p.x - prop.offset).abs() < prop.halfWidth + carHalfWidth &&
           p.stun <= 0) {
-        p.speed *= prop.kind == Prop.barrel ? .45 : .7;
-        p.stun = prop.kind == Prop.barrel ? .7 : .35;
+        p.speed *= prop.heavy ? .45 : .7;
+        p.stun = prop.heavy ? .7 : .35;
         ev.crash = true;
       }
     }

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:ota_update/ota_update.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
 import '../update/updater.dart';
@@ -43,59 +43,59 @@ class _UpdateDialog extends StatefulWidget {
 }
 
 class _UpdateDialogState extends State<_UpdateDialog> {
-  StreamSubscription<OtaEvent>? _sub;
   bool _busy = false;
   double? _progress;
   String? _error;
 
-  void _start() {
+  Future<void> _start() async {
     setState(() {
       _busy = true;
+      _progress = null;
       _error = null;
     });
-    _sub = Updater.install(widget.info).listen((e) {
-      if (!mounted) return;
-      switch (e.status) {
-        case OtaStatus.DOWNLOADING:
-          setState(() => _progress = (int.tryParse(e.value ?? '') ?? 0) / 100);
-        case OtaStatus.INSTALLING:
-        case OtaStatus.INSTALLATION_DONE:
-          Navigator.of(context).pop();
-        case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
-          setState(() {
-            _busy = false;
-            _error = 'Allow "Install unknown apps" for this app, then try again.';
-          });
-        default:
-          setState(() {
-            _busy = false;
-            _error = 'Update failed (${e.status.name}). Please try again.';
-          });
-      }
-    }, onError: (Object _) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = 'Update failed. Please try again.';
-        });
-      }
-    });
+    String? error;
+    try {
+      final path = await Updater.download(widget.info, (p) {
+        if (mounted) setState(() => _progress = p);
+      });
+      await Updater.install(path);
+      if (mounted) Navigator.of(context).pop();
+      return;
+    } on PlatformException catch (e) {
+      error = 'Could not open the installer: ${e.message ?? e.code}';
+    } catch (e) {
+      error = 'Download failed. Check your internet and try again.';
+    }
+    if (mounted) {
+      setState(() {
+        _busy = false;
+        _error = error;
+      });
+    }
   }
 
-  @override
-  void dispose() {
-    _sub?.cancel();
-    super.dispose();
+  Future<void> _browser() async {
+    try {
+      await Updater.openInBrowser(widget.info);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not open the browser.');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final body = AppText.title.copyWith(
-        fontSize: 15, fontWeight: FontWeight.w400, height: 1.3);
+      fontSize: 15,
+      fontWeight: FontWeight.w400,
+      height: 1.3,
+    );
     return AlertDialog(
       backgroundColor: AppColors.cardTop,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      title: Text('Update available', style: AppText.title.copyWith(fontSize: 22)),
+      title: Text(
+        'Update available',
+        style: AppText.title.copyWith(fontSize: 22),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -104,7 +104,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             _busy
                 ? 'Downloading build ${widget.info.build}…'
                 : 'A newer build (${widget.info.build}) is ready. Android will '
-                    'ask you to confirm the install.',
+                      'ask you to confirm the install; the app closes while '
+                      'it installs.',
             style: body,
           ),
           if (_busy) ...[
@@ -121,8 +122,13 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           ],
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(_error!,
-                style: body.copyWith(color: const Color(0xFFFF8A80), fontSize: 13)),
+            Text(
+              _error!,
+              style: body.copyWith(
+                color: const Color(0xFFFF8A80),
+                fontSize: 13,
+              ),
+            ),
           ],
         ],
       ),
@@ -130,12 +136,26 @@ class _UpdateDialogState extends State<_UpdateDialog> {
         if (!_busy)
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Later', style: TextStyle(color: AppColors.cream)),
+            child: const Text(
+              'Later',
+              style: TextStyle(color: AppColors.cream),
+            ),
+          ),
+        if (!_busy && _error != null)
+          TextButton(
+            onPressed: _browser,
+            child: const Text(
+              'Open in browser',
+              style: TextStyle(color: AppColors.cream),
+            ),
           ),
         if (!_busy)
           TextButton(
             onPressed: _start,
-            child: const Text('Update now', style: TextStyle(color: AppColors.mint)),
+            child: const Text(
+              'Update now',
+              style: TextStyle(color: AppColors.mint),
+            ),
           ),
       ],
     );
@@ -158,8 +178,11 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   void initState() {
     super.initState();
     if (Updater.supported) {
-      Updater.installed()
-          .then((v) => mounted ? setState(() => _version = '${v.version} (build ${v.build})') : null);
+      Updater.installed().then(
+        (v) => mounted
+            ? setState(() => _version = '${v.version} (build ${v.build})')
+            : null,
+      );
     }
   }
 
@@ -187,13 +210,18 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   @override
   Widget build(BuildContext context) {
     final small = AppText.title.copyWith(
-        fontSize: 14, fontWeight: FontWeight.w400, color: AppColors.creamDim);
+      fontSize: 14,
+      fontWeight: FontWeight.w400,
+      color: AppColors.creamDim,
+    );
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
       decoration: const BoxDecoration(
         color: AppColors.bgTop,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border(top: BorderSide(color: AppColors.cardBorder, width: 1.5)),
+        border: Border(
+          top: BorderSide(color: AppColors.cardBorder, width: 1.5),
+        ),
       ),
       child: SafeArea(
         top: false,
@@ -222,17 +250,25 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
                     gradient: const LinearGradient(
-                        colors: [Color(0xFF6BF0BD), AppColors.mintDeep]),
+                      colors: [Color(0xFF6BF0BD), AppColors.mintDeep],
+                    ),
                   ),
                   child: _checking
                       ? const SizedBox(
                           width: 22,
                           height: 22,
                           child: CircularProgressIndicator(
-                              strokeWidth: 3, color: AppColors.ink))
-                      : Text('Check for updates',
-                          style: AppText.title
-                              .copyWith(fontSize: 17, color: AppColors.ink)),
+                            strokeWidth: 3,
+                            color: AppColors.ink,
+                          ),
+                        )
+                      : Text(
+                          'Check for updates',
+                          style: AppText.title.copyWith(
+                            fontSize: 17,
+                            color: AppColors.ink,
+                          ),
+                        ),
                 ),
               )
             else

@@ -68,16 +68,18 @@ Sholo Guti on the 37-point board (a 5x5 grid with a triangle at each end).
 
 ## Car Racing
 
-A 3D-style circuit race seen from behind your car, drawn entirely in code.
+A 3D-style circuit race seen from above and behind your car, using the
+art in `assets/images/race/` (cars, trees, flowers, fences, signs, obstacles).
+It is not full 3D: the cars and scenery are flat pictures on a projected road.
 
 - Race 2, 3 or 4 cars (you against 1–3 computer cars) over 1, 2, 3 or 5
-  laps. The track has curves, hills, a start/finish arch, trees, palms,
-  rocks, street lamps and billboards beside the road.
+  laps. The track has curves, hills, a start/finish arch, trees, bushes, flowers,
+  rocks, fences, flags, signs and street lamps beside the road.
 - The car speeds up by itself. Hold ◀ / ▶ to steer, BRAKE to slow down
   (the brake lights come on) and NITRO for a burst of speed; the nitro
   bar refills slowly. Arrow keys, A/D, space and shift also work.
-- Cones and barrels on the road slow you down; leaving the road slows
-  you, and hitting a tree or rock out there stops you dead. Cars bump
+- Cones, barrels, tyres, barriers and hay bales on the road slow you down; leaving the road slows
+  you, and hitting a tree, rock or fence out there nearly stops you. Cars bump
   each other.
 - A 3-2-1 start light, live position, lap, time and speed, and a results
   card at the end.

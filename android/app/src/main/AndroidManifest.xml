@@ -33,24 +33,17 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <!-- In-app updater (ota_update): hands the downloaded APK to the
-             system installer and receives the install result. -->
+        <!-- In-app updater: lends the downloaded APK to the system
+             installer. -->
         <provider
-            android:name="sk.fourq.otaupdate.OtaUpdateFileProvider"
-            android:authorities="${applicationId}.ota_update_provider"
+            android:name=".UpdateFileProvider"
+            android:authorities="${applicationId}.updates"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/filepaths" />
         </provider>
-        <receiver
-            android:name="sk.fourq.otaupdate.InstallResultReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="${applicationId}.ACTION_INSTALL_COMPLETE" />
-            </intent-filter>
-        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

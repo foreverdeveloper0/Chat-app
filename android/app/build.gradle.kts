@@ -12,8 +12,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        // Required by the ota_update plugin.
-        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -64,5 +62,6 @@ flutter {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    // FileProvider, for the in-app updater.
+    implementation("androidx.core:core:1.13.1")
 }

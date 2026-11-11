@@ -64,6 +64,7 @@ class _RaceScreenState extends State<RaceScreen>
   void initState() {
     super.initState();
     _newRace();
+    RaceSprites.load();
     _ticker.start();
   }
 
@@ -485,93 +486,20 @@ class _RaceScreenState extends State<RaceScreen>
   );
 
   Widget _controls() {
-    Widget pedal(
-      String key,
-      IconData icon,
-      String label,
-      Color colour,
-      void Function(bool) set, {
-      double size = 74,
-    }) {
-      return Listener(
-        key: ValueKey(key),
-        onPointerDown: (_) => set(true),
-        onPointerUp: (_) => set(false),
-        onPointerCancel: (_) => set(false),
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              center: const Alignment(-.3, -.4),
-              colors: [Color.lerp(colour, Colors.white, .3)!, colour],
-            ),
-            border: Border.all(color: const Color(0xCCFFFFFF), width: 2.5),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x88000000),
-                blurRadius: 10,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: Colors.white, size: size * .42),
-              if (label.isNotEmpty)
-                Text(
-                  label,
-                  style: _small.copyWith(color: Colors.white, fontSize: 11),
-                ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    const steer = Color(0xCC2A3A9A);
     return Align(
       alignment: Alignment.bottomCenter,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 0, 14, 22),
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 26),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            pedal(
-              'left',
-              Icons.arrow_back_ios_new_rounded,
-              '',
-              steer,
-              (v) => _input.left = v,
-            ),
-            const SizedBox(width: 12),
-            pedal(
-              'right',
-              Icons.arrow_forward_ios_rounded,
-              '',
-              steer,
-              (v) => _input.right = v,
-            ),
-            const Spacer(),
-            pedal(
-              'nitro',
-              Icons.local_fire_department_rounded,
-              'NITRO',
-              const Color(0xCC1E78E0),
-              (v) => _input.nitro = v,
-              size: 62,
-            ),
+            _Pedal('left', 78, (v) => _input.left = v),
             const SizedBox(width: 10),
-            pedal(
-              'brake',
-              Icons.pan_tool_rounded,
-              'BRAKE',
-              const Color(0xCCD02020),
-              (v) => _input.brake = v,
-              size: 80,
-            ),
+            _Pedal('right', 78, (v) => _input.right = v),
+            const Spacer(),
+            _Pedal('nitro', 68, (v) => _input.nitro = v, 'NITRO'),
+            const SizedBox(width: 8),
+            _Pedal('brake', 84, (v) => _input.brake = v, 'BRAKE'),
           ],
         ),
       ),
@@ -606,4 +534,78 @@ class _RaceScreenState extends State<RaceScreen>
     height: 1.05,
     color: Colors.white,
   );
+}
+
+/// A round control that is held down: steering, brake or nitro.
+class _Pedal extends StatefulWidget {
+  _Pedal(this.name, this.size, this.onHold, [this.label])
+    : super(key: ValueKey(name));
+  final String? label;
+  final String name;
+  final double size;
+  final void Function(bool) onHold;
+
+  @override
+  State<_Pedal> createState() => _PedalState();
+}
+
+class _PedalState extends State<_Pedal> {
+  bool _down = false;
+
+  void _set(bool v) {
+    widget.onHold(v);
+    if (mounted) setState(() => _down = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (_) => _set(true),
+      onPointerUp: (_) => _set(false),
+      onPointerCancel: (_) => _set(false),
+      child: AnimatedScale(
+        scale: _down ? .9 : 1,
+        duration: const Duration(milliseconds: 70),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x77000000),
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.bottomCenter,
+            clipBehavior: Clip.none,
+            children: [
+              Image.asset(
+                'assets/images/race/btn_${widget.name}.png',
+                width: widget.size,
+                height: widget.size,
+                opacity: AlwaysStoppedAnimation(_down ? 1 : .93),
+              ),
+              if (widget.label != null)
+                Positioned(
+                  bottom: -15,
+                  child: Text(
+                    widget.label!,
+                    style: const TextStyle(
+                      fontFamily: AppText.family,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      letterSpacing: 1,
+                      color: Colors.white,
+                      shadows: [Shadow(color: Colors.black, blurRadius: 4)],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
