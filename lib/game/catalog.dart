@@ -15,7 +15,7 @@ class GameInfo {
 /// In the order the home page shows them.
 const games = [
   GameInfo('Ludo', 'ludo', ready: true),
-  GameInfo('Snake', 'snake', ready: true),
+  GameInfo('Snake & Ladder', 'snake', ready: true),
   GameInfo('Carrom', 'carrom'),
   GameInfo('16 Ghuti', 'ghuti'),
   GameInfo('Car Racing', 'racing'),

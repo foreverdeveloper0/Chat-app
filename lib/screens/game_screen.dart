@@ -748,7 +748,7 @@ class PlayerPanel extends StatelessWidget {
   final int player;
   final String name;
   final bool isYou;
-  final LudoController game;
+  final DiceGame game;
   final Animation<double> pulse;
   final bool mirrored;
   final String? bubble;
@@ -1059,7 +1059,7 @@ class _Dice extends StatefulWidget {
     required this.pulse,
     required this.color,
   });
-  final LudoController game;
+  final DiceGame game;
   final bool canRoll;
   final Animation<double> pulse;
   final Color color;

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../theme/board_assets.dart';
 import '../game/coins.dart';
 import '../screens/game_screen.dart';
+import '../screens/snl_screen.dart';
 import '../theme/app_colors.dart';
 import 'game_card.dart';
 
@@ -22,7 +23,8 @@ const _seatPlans = {
 const _stakes = [500, 1000, 10000, 100000, 1000000, 10000000];
 
 /// Lets the player pick how many seats to fill, then opens the match.
-Future<void> showGameSetup(BuildContext context, {required bool vsComputer}) {
+Future<void> showGameSetup(BuildContext context,
+    {required bool vsComputer, bool snakes = false}) {
   var stake = 1000;
   return showModalBottomSheet<void>(
     context: context,
@@ -124,7 +126,7 @@ Future<void> showGameSetup(BuildContext context, {required bool vsComputer}) {
                         radius: 18,
                         onTap: () {
                           Navigator.pop(sheet);
-                          _open(context, n, vsComputer, stake);
+                          _open(context, n, vsComputer, stake, snakes);
                         },
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -163,7 +165,8 @@ Future<void> showGameSetup(BuildContext context, {required bool vsComputer}) {
   );
 }
 
-void _open(BuildContext context, int players, bool vsComputer, int stake) {
+void _open(BuildContext context, int players, bool vsComputer, int stake,
+    bool snakes) {
   final seats = _seatPlans[players]!;
   final names = <int, String>{};
   for (var i = 0; i < seats.length; i++) {
@@ -174,16 +177,28 @@ void _open(BuildContext context, int players, bool vsComputer, int stake) {
   Navigator.of(context).push(
     PageRouteBuilder<void>(
       transitionDuration: const Duration(milliseconds: 280),
-      pageBuilder: (_, _, _) => GameScreen(
-        title: vsComputer ? 'Play vs Computer' : 'Pass & Play',
-        seats: seats,
-        bots: _autoplay
+      pageBuilder: (_, _, _) {
+        final bots = _autoplay
             ? seats.toSet()
-            : (vsComputer ? seats.skip(1).toSet() : const {}),
-        names: names,
-        entry: stake,
-        roomId: '${100000 + Random().nextInt(900000)}',
-      ),
+            : (vsComputer ? seats.skip(1).toSet() : const <int>{});
+        final roomId = '${100000 + Random().nextInt(900000)}';
+        return snakes
+            ? SnlScreen(
+                seats: seats,
+                bots: bots,
+                names: names,
+                entry: stake,
+                roomId: roomId,
+              )
+            : GameScreen(
+                title: vsComputer ? 'Play vs Computer' : 'Pass & Play',
+                seats: seats,
+                bots: bots,
+                names: names,
+                entry: stake,
+                roomId: roomId,
+              );
+      },
       transitionsBuilder: (_, a, _, child) =>
           FadeTransition(opacity: a, child: child),
     ),

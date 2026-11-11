@@ -2,14 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 
 import '../art/pieces.dart';
-import '../art/snake_art.dart';
+import '../art/snl_art.dart';
 import '../game/catalog.dart';
 import '../game/ludo_controller.dart';
 import '../game/ludo_rules.dart';
-import '../game/snake_game.dart';
+import '../game/snl_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/board_assets.dart';
 
@@ -549,10 +548,9 @@ class _DicePainter extends CustomPainter {
       old.value != value || old.rx != rx || old.ry != ry || old.rz != rz;
 }
 
-// ───────────────────────── Snake, live ─────────────────────────
+// ───────────────────────── Snakes & Ladders, live ─────────────────────────
 
-/// A snake that plays by itself on the Snake banner, drawn with the same
-/// painters as the real game.
+/// Four bots racing up the Snakes & Ladders board on the Snake banner.
 class _SnakeLive extends StatefulWidget {
   const _SnakeLive({required this.panel});
   final BannerPanel panel;
@@ -561,100 +559,110 @@ class _SnakeLive extends StatefulWidget {
   State<_SnakeLive> createState() => _SnakeLiveState();
 }
 
-class _SnakeLiveState extends State<_SnakeLive>
-    with SingleTickerProviderStateMixin {
-  static const _stepMs = 120.0;
-
-  final _game = SnakeGame(cols: 11, rows: 11);
-  final _view = SnakeView();
-  late final Ticker _ticker;
-  Duration _last = Duration.zero;
-  double _acc = 0;
-  double _rest = 0; // seconds left lying still after a crash
+class _SnakeLiveState extends State<_SnakeLive> {
+  late SnlController _game;
 
   @override
   void initState() {
     super.initState();
-    // Arrive mid-run instead of with a three-cell snake.
-    for (var i = 0; i < 110 && _game.alive; i++) {
-      _advance();
-    }
-    if (!_game.alive) _game.reset();
-    _view.t = 1;
-    _ticker = createTicker(_onTick)..start();
+    _deal();
   }
 
-  SnakeStep _advance() {
-    final d = _game.botMove();
-    if (d != null) _game.turn(d);
-    return _game.step();
+  void _deal() {
+    final rng = math.Random();
+    _game = SnlController(
+      seats: const [3, 0, 1, 2],
+      bots: const {0, 1, 2, 3},
+      haptics: false,
+      speed: .7,
+      random: rng,
+    );
+    // A race already under way.
+    for (final p in _game.seats) {
+      _game.position[p] = 6 + rng.nextInt(60);
+    }
+    _game
+      ..addListener(_onChange)
+      ..start();
   }
 
-  void _onTick(Duration elapsed) {
-    final dt = math.min((elapsed - _last).inMicroseconds / 1e6, .05);
-    _last = elapsed;
-    if (_rest > 0) {
-      _rest -= dt;
-      _view.flash = (_rest - 1).clamp(0, 1);
-      if (_rest <= 0) {
-        _game.reset();
-        _view.reset();
-      }
-    } else {
-      _acc += dt * 1000;
-      while (_acc >= _stepMs && _rest <= 0) {
-        _acc -= _stepMs;
-        final r = _advance();
-        if (r.died || r.won) {
-          _rest = 1.4;
-          _view.t = 1;
-        } else if (r.ate || r.ateBonus) {
-          _view.foodBorn = _view.time;
-          _view.burst(r.at!, r.ateBonus ? bonusColor : fruitColors[r.kind],
-              '+${r.gained}');
-        }
-        if (r.bonusSpawned) _view.bonusBorn = _view.time;
-      }
-      if (_rest <= 0) _view.t = (_acc / _stepMs).clamp(0, 1);
+  void _onChange() {
+    if (!mounted) return;
+    if (_game.phase == Phase.gameOver) {
+      final old = _game..removeListener(_onChange);
+      Future.microtask(old.dispose);
+      _deal();
     }
-    _view.tick(dt);
+    setState(() {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _game.paused = !TickerMode.valuesOf(context).enabled;
   }
 
   @override
   void dispose() {
-    _ticker.dispose();
-    _view.dispose();
+    _game
+      ..removeListener(_onChange)
+      ..dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final b = widget.panel.edge;
+    final panel = widget.panel;
+    final b = panel.edge;
+    final rim = b * snlRim, cell = (b - rim * 2) / 10;
+    final pw = cell * 1.05, ph = pw / pawnAspect;
+    final slide = _game.slide;
+    Offset foot(Offset cells) => panel
+        .map(Offset(rim + cells.dx * cell, rim + cells.dy * cell + cell * .25));
+    final corner = panel.map(Offset(b * .96, b * .9));
+    final dice = b * .3;
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         Positioned(
           left: 0,
           top: 0,
           child: Transform(
-            transform: widget.panel.matrix,
-            child: SizedBox.square(
-              dimension: b,
-              child: Stack(
-                children: [
-                  RepaintBoundary(
-                    child: CustomPaint(
-                      size: Size.square(b),
-                      painter: SnakeFieldPainter(
-                          cols: _game.cols, rows: _game.rows, wrap: false),
-                    ),
-                  ),
-                  CustomPaint(
-                    size: Size.square(b),
-                    painter: SnakeScenePainter(_game, _view),
-                  ),
-                ],
+            transform: panel.matrix,
+            child: RepaintBoundary(
+              child: CustomPaint(
+                size: Size.square(b),
+                painter: const SnlBoardPainter(numbers: false),
               ),
             ),
+          ),
+        ),
+        for (final p in _game.seats)
+          () {
+            // While riding, glide to the far end of the ladder or snake.
+            final riding = slide?.player == p;
+            final at = foot(snlCentre(riding ? slide!.to : _game.position[p]!) +
+                Offset((p - 1.5) * .12, 0));
+            return AnimatedPositioned(
+              key: ValueKey(p),
+              duration: Duration(milliseconds: riding ? 600 : 150),
+              curve: riding ? Curves.easeInOut : Curves.easeOut,
+              left: at.dx - pw / 2,
+              top: at.dy - ph * .92,
+              width: pw,
+              height: ph,
+              child: Image.asset(pawnAssets[p],
+                  fit: BoxFit.fill, filterQuality: FilterQuality.medium),
+            );
+          }(),
+        Positioned(
+          left: corner.dx - dice * .55,
+          top: corner.dy - dice * .5,
+          child: _DemoDice(
+            value: _game.dice,
+            phase: _game.phase,
+            color: playerColors[_game.current],
+            size: dice,
           ),
         ),
       ],

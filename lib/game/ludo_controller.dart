@@ -1,9 +1,11 @@
+export 'dice_game.dart' show DiceGame, Phase;
+
 import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'dice_game.dart';
 import 'ludo_rules.dart';
 import 'sounds.dart';
 
@@ -18,11 +20,10 @@ class Token {
   bool get onTrack => progress >= 0 && progress <= LudoRules.lastTrack;
 }
 
-enum Phase { awaitingRoll, rolling, landed, choosing, moving, gameOver }
 
 /// Runs a Ludo match: turn order, dice, moves, captures, bots, turn timer,
 /// lives, finishing order and the step-by-step timing the board animates to.
-class LudoController extends ChangeNotifier {
+class LudoController extends DiceGame {
   LudoController({
     required this.seats,
     this.bots = const {},
@@ -46,6 +47,7 @@ class LudoController extends ChangeNotifier {
   static const landMs = 380;
 
   /// Player ids in turn order.
+  @override
   final List<int> seats;
   final Set<int> bots;
 
@@ -53,6 +55,7 @@ class LudoController extends ChangeNotifier {
   final double speed;
 
   /// Seconds a human has to act before losing a life; 0 turns the timer off.
+  @override
   final int turnSeconds;
   final Random _rng;
 
@@ -69,6 +72,7 @@ class LudoController extends ChangeNotifier {
   final tokens = [
     for (var p = 0; p < 4; p++) [for (var i = 0; i < 4; i++) Token(p, i)],
   ];
+  @override
   final lives = <int, int>{};
 
   /// Opponent pieces each player has sent home, and pieces they have lost.
@@ -79,10 +83,14 @@ class LudoController extends ChangeNotifier {
   final finished = <int>[];
 
   /// Players who ran out of lives or quit.
+  @override
   final left = <int>{};
 
+  @override
   int current;
+  @override
   Phase phase = Phase.awaitingRoll;
+  @override
   int dice = 6;
   int rollTick = 0;
   int sixes = 0;
@@ -91,12 +99,15 @@ class LudoController extends ChangeNotifier {
   String message = '';
 
   /// Changes every time the turn timer restarts.
+  @override
   int turnSerial = 0;
+  @override
   bool timerRunning = false;
   Timer? _timer;
   bool _autoPlay = false;
   bool _disposed = false;
 
+  @override
   bool isBot(int player) => bots.contains(player);
   bool get humanTurn => !isBot(current);
   int homeCount(int player) => tokens[player].where((t) => t.isHome).length;
@@ -104,6 +115,7 @@ class LudoController extends ChangeNotifier {
   List<int> get active => [for (final p in seats) if (isActive(p)) p];
 
   /// 1 for the first finisher, 0 while still playing.
+  @override
   int rankOf(int player) => finished.indexOf(player) + 1;
 
   void start() => _beginTurn();
@@ -216,6 +228,7 @@ class LudoController extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> roll({int? forced}) async {
     if (phase != Phase.awaitingRoll) return;
     _stopTimer();

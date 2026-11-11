@@ -8,7 +8,6 @@ import '../theme/app_colors.dart';
 import '../widgets/banner_carousel.dart';
 import '../widgets/game_setup_sheet.dart';
 import '../widgets/home_sections.dart';
-import '../widgets/snake_setup_sheet.dart';
 import '../widgets/update_ui.dart';
 
 /// Everything is laid out on a 390pt-wide design canvas and scaled to the
@@ -71,7 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'ludo':
         showLudoModes(context);
       case 'snake':
-        showSnakeSetup(context);
+        showLudoModes(context, snakes: true);
       default:
         showComingSoon(context, game.name);
     }
@@ -196,9 +195,9 @@ class _Placeholder extends StatelessWidget {
 
 // ───────────────────────── Ludo modes ─────────────────────────
 
-/// How to play Ludo: the two finished modes open a table, the online ones
+/// How to play Ludo or Snakes & Ladders: the two finished modes open a table, the online ones
 /// are announced as coming soon.
-Future<void> showLudoModes(BuildContext context) {
+Future<void> showLudoModes(BuildContext context, {bool snakes = false}) {
   const modes = [
     (ArtKind.robot, 'Play vs Computer', 'You against 1 to 3 bots', true),
     (ArtKind.dicePair, 'Pass & Play', '2 to 4 players on this phone', true),
@@ -234,7 +233,8 @@ Future<void> showLudoModes(BuildContext context) {
               ),
             ),
             const SizedBox(height: 12),
-            Text('Ludo', style: AppText.title.copyWith(fontSize: 24)),
+            Text(snakes ? 'Snake & Ladder' : 'Ludo',
+                style: AppText.title.copyWith(fontSize: 24)),
             const SizedBox(height: 2),
             Text('Choose how to play',
                 style: AppText.title
@@ -248,7 +248,8 @@ Future<void> showLudoModes(BuildContext context) {
                     Navigator.pop(sheet);
                     if (ready) {
                       showGameSetup(context,
-                          vsComputer: title == 'Play vs Computer');
+                          vsComputer: title == 'Play vs Computer',
+                          snakes: snakes);
                     } else {
                       showComingSoon(context, title);
                     }

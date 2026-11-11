@@ -17,8 +17,7 @@ enum Sfx {
   lifeLost,
   chat,
   tap,
-  // Snake
-  eat,
+  // Snakes & Ladders: climbing a ladder, sliding down a snake
   bonus,
   crash,
 }
