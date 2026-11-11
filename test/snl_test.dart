@@ -32,22 +32,14 @@ void main() {
       expectValid(l);
       expect(identical(l, SnlLayout.classic), isFalse);
       expect(l.ladders.length, 6);
-      expect(l.snakes.length, 5);
+      expect(l.snakes.length, 6);
       expect(l.snakes.keys.any((h) => h > 90), isTrue);
       for (final p in l.pieces) {
-        if (p.snake) {
-          // The whole snake picture lies on the playing grid.
-          final (left, top, right, bottom) =
-              snakeBox(snakeSkins[p.skin], p.from, p.to);
-          expect(left, greaterThan(-.06));
-          expect(right, lessThan(10.06));
-          expect(top, greaterThan(-.11));
-          expect(bottom, lessThan(10.11));
-        } else {
-          // Ladders stand straight up one column.
-          expect(snlCell(p.from).x, snlCell(p.to).x);
-          expect(p.skin, lessThan(SnlLayout.ladderSkins));
-        }
+        final a = snlCell(p.from), b = snlCell(p.to);
+        final rows = (a.y - b.y).abs(), cols = (a.x - b.x).abs();
+        // Two to four rows long, and never flatter than about 45 degrees.
+        expect(rows, inInclusiveRange(2, 4));
+        expect(cols, lessThanOrEqualTo(rows + 1));
       }
       seen.add(l.pieces.map((p) => '${p.from}-${p.to}').join(','));
     }

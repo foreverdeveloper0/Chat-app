@@ -15,39 +15,8 @@ Point<int> snlCell(int n) {
   return Point(row.isOdd ? 9 - col : col, row);
 }
 
-/// One snake picture: its size in pixels, where its head and tail tip are
-/// (as fractions of the picture), and the (rows down, columns across) drops
-/// it can make while keeping its natural upright shape.
-class SnakeSkin {
-  const SnakeSkin(this.w, this.h, this.hx, this.hy, this.tx, this.ty, this.fits);
-  final double w, h, hx, hy, tx, ty;
-  final List<(int, int)> fits;
-}
-
-const snakeSkins = [
-  SnakeSkin(354, 420, .202, .116, .975, .998, [(2, 2)]),
-  SnakeSkin(420, 414, .149, .108, .988, .937, [(2, 3)]),
-  SnakeSkin(207, 420, .649, .116, .498, .998, [(2, 0), (3, 0)]),
-];
-
-/// Squares on the board artwork are this much taller than they are wide.
+/// Squares on the board artwork are about this much taller than wide.
 const snlTall = 1.3;
-
-/// The picture's box for a snake from [head] to [tail], in board units
-/// (columns across, visual rows down): left, top, right, bottom.
-(double, double, double, double) snakeBox(SnakeSkin s, int head, int tail) {
-  final a = snlCell(head), b = snlCell(tail);
-  final rows = (a.y - b.y).toDouble(), cols = (b.x - a.x).toDouble();
-  final sy = rows / ((s.ty - s.hy) * s.h);
-  final natural = (s.tx - s.hx) * s.w;
-  // Mirror or stretch sideways so the tail lands on its square.
-  final sx = cols != 0
-      ? cols / natural
-      : sy * snlTall * (head.isEven ? 1 : -1);
-  final x0 = a.x + .5 - s.hx * s.w * sx, x1 = x0 + s.w * sx;
-  final top = (9 - a.y) + .5 - s.hy * s.h * sy;
-  return (min(x0, x1), top, max(x0, x1), top + s.h * sy);
-}
 
 /// Where the ladders and snakes are for one match.
 class SnlLayout {
@@ -60,7 +29,8 @@ class SnlLayout {
   /// Foot -> top, and head -> tail.
   final Map<int, int> ladders, snakes;
 
-  static const ladderSkins = 14;
+  static const ladderSkins = 4;
+  static const snakeSkins = 4;
 
   /// A fixed board used by the rule tests.
   static final classic = SnlLayout(const [
@@ -68,25 +38,26 @@ class SnlLayout {
     SnlPiece(13, 46, 1),
     SnlPiece(33, 49, 2),
     SnlPiece(42, 63, 3),
-    SnlPiece(50, 69, 4),
-    SnlPiece(62, 81, 5),
-    SnlPiece(74, 92, 6),
+    SnlPiece(50, 69, 0),
+    SnlPiece(62, 81, 1),
+    SnlPiece(74, 92, 2),
     SnlPiece(27, 5, 0),
     SnlPiece(40, 3, 1),
     SnlPiece(43, 18, 2),
-    SnlPiece(54, 31, 0),
-    SnlPiece(66, 45, 1),
-    SnlPiece(76, 58, 0),
+    SnlPiece(54, 31, 3),
+    SnlPiece(66, 45, 0),
+    SnlPiece(76, 58, 1),
     SnlPiece(89, 53, 2),
-    SnlPiece(99, 41, 1),
+    SnlPiece(99, 41, 3),
   ]);
 
-  /// A fresh, fair board. Ladders stand straight up their column; every
-  /// snake keeps its natural upright shape, fits wholly inside the board and
-  /// keeps clear of the others. One snake always waits in the last row.
+  /// A fresh, fair board. Ladders and snakes run straight from square
+  /// centre to square centre, upright or slanting (like 7 to 61), never
+  /// share a square, never cross or crowd each other, and one snake always
+  /// waits in the last row.
   factory SnlLayout.random([Random? random]) {
     final rng = random ?? Random();
-    for (var attempt = 0; attempt < 3000; attempt++) {
+    for (var attempt = 0; attempt < 2000; attempt++) {
       final layout = _tryBuild(rng);
       if (layout != null) return layout;
     }
@@ -96,80 +67,58 @@ class SnlLayout {
   static SnlLayout? _tryBuild(Random rng) {
     final pieces = <SnlPiece>[];
     final used = <int>{1, 100};
-    final boxes = <(double, double, double, double)>[];
-    final ladderSkin = List.generate(ladderSkins, (i) => i)..shuffle(rng);
-    final skinOrder = List.generate(snakeSkins.length, (i) => i)..shuffle(rng);
+    // Points sampled along every piece placed so far, in board units.
+    final taken = <Point<double>>[];
 
     int square(int col, int row) => row * 10 + (row.isOdd ? 9 - col : col) + 1;
-    bool clear((double, double, double, double) box) {
-      for (final o in boxes) {
-        if (box.$1 < o.$3 && o.$1 < box.$3 && box.$2 < o.$4 && o.$2 < box.$4) {
-          return false;
-        }
+
+    bool place(int from, int to, int skin) {
+      if (used.contains(from) || used.contains(to)) return false;
+      final a = snlCell(from), b = snlCell(to);
+      final ax = a.x.toDouble(), ay = a.y * snlTall;
+      final bx = b.x.toDouble(), by = b.y * snlTall;
+      final line = [
+        for (var i = 0; i <= 10; i++)
+          Point(ax + (bx - ax) * i / 10, ay + (by - ay) * i / 10),
+      ];
+      for (final p in line) {
+        if (taken.any((q) => q.distanceTo(p) < .92)) return false;
       }
+      used..add(from)..add(to);
+      taken.addAll(line);
+      pieces.add(SnlPiece(from, to, skin));
       return true;
     }
 
-    // Snakes: heads from the top row down.
-    var n = 0;
-    for (final row in [9, 8, 6, 5, 3]) {
-      var ok = false;
-      for (var i = 0; i < 160 && !ok; i++) {
-        // Each snake gets its own picture; only after many misses does
-        // it borrow another one.
-        final skin = skinOrder[(n + i ~/ 60) % snakeSkins.length];
-        final s = snakeSkins[skin];
-        final (rows, cols) = s.fits[rng.nextInt(s.fits.length)];
-        if (row - rows < 0) continue;
-        final col = rng.nextInt(10);
-        final tailCol = col + (rng.nextBool() ? cols : -cols);
-        if (tailCol < 0 || tailCol > 9) continue;
-        final from = square(col, row), to = square(tailCol, row - rows);
-        if (used.contains(from) || used.contains(to)) continue;
-        final box = snakeBox(s, from, to);
-        // The whole picture stays on the playing grid...
-        if (box.$1 < -.05 || box.$3 > 10.05 || box.$2 < -.1 || box.$4 > 10.1) {
-          continue;
-        }
-        // ...and its core keeps off every other piece.
-        final w = box.$3 - box.$1, h = box.$4 - box.$2;
-        final core = (
-          box.$1 + w * .06,
-          box.$2 + h * .04,
-          box.$3 - w * .06,
-          box.$4 - h * .04,
-        );
-        if (!clear(core)) continue;
-        boxes.add(core);
-        used..add(from)..add(to);
-        pieces.add(SnlPiece(from, to, skin));
-        ok = true;
-      }
-      if (!ok) return null;
-      n++;
+    /// A partner square [rows] up or down and at most [rows] + 1 columns
+    /// across, so nothing lies flatter than about 45 degrees.
+    int? partner(int col, int row, int rows, {required bool up}) {
+      final r = up ? row + rows : row - rows;
+      if (r < 0 || r > 9) return null;
+      final c = col + rng.nextInt(rows * 2 + 3) - rows - 1;
+      if (c < 0 || c > 9) return null;
+      return square(c, r);
     }
 
-    // Ladders: straight up one column, feet spread from the bottom rows up.
-    for (final row in [0, 1, 2, 3, 5, 6]) {
+    // Snakes: heads from the top row down.
+    for (final (i, row) in [9, 8, 7, 6, 4, 3].indexed) {
       var ok = false;
-      for (var i = 0; i < 80 && !ok; i++) {
+      for (var t = 0; t < 150 && !ok; t++) {
         final col = rng.nextInt(10);
-        final rise = 1 + rng.nextInt(3);
-        if (row + rise > 9) continue;
-        final from = square(col, row), to = square(col, row + rise);
-        if (used.contains(from) || used.contains(to)) continue;
-        final box = (
-          col + .12,
-          (9 - row - rise) + .2,
-          col + .88,
-          (9 - row) + .8,
-        );
-        if (!clear(box)) continue;
-        boxes.add(box);
-        used..add(from)..add(to);
-        pieces.add(SnlPiece(
-            from, to, ladderSkin[pieces.where((p) => !p.snake).length]));
-        ok = true;
+        final to = partner(col, row, 2 + rng.nextInt(3), up: false);
+        if (to == null) continue;
+        ok = place(square(col, row), to, i % snakeSkins);
+      }
+      if (!ok) return null;
+    }
+    // Ladders: feet from the bottom rows up.
+    for (final (i, row) in [0, 1, 2, 3, 5, 6].indexed) {
+      var ok = false;
+      for (var t = 0; t < 150 && !ok; t++) {
+        final col = rng.nextInt(10);
+        final to = partner(col, row, 2 + rng.nextInt(3), up: true);
+        if (to == null) continue;
+        ok = place(square(col, row), to, i % ladderSkins);
       }
       if (!ok) return null;
     }

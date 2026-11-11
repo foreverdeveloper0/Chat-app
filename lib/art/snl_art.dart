@@ -13,13 +13,29 @@ const snlAspect = .72;
 /// The gold frame's thickness as a fraction of the board's width.
 const _frame = .022;
 
-/// Front-facing ladder pictures (the others are drawn at an angle).
-const _straightLadders = [0, 5, 7, 8];
+/// Width / height of the four front-facing ladder pictures.
+const _ladderAspect = [.335, .217, .311, .2];
+const _ladderFiles = [0, 5, 7, 8];
 
-/// Width / height of each upright ladder image.
-const _ladderAspect = [
-  .335, .396, .215, .33, .272, .217, .272, //
-  .311, .2, .33, .415, .396, .396, .261,
+/// Each slim snake lies head-left to tail-right: (height / width, head x,
+/// head-and-tail y, tail x), the last three as fractions of the picture.
+const _snakes = [
+  (92 / 600, .045, .322, .994),
+  (76 / 600, .047, .365, .994),
+  (69 / 600, .047, .419, .992),
+  (71 / 600, .048, .441, .992),
+];
+
+/// The grid artwork's tiles are not all the same size (the 1 and 100
+/// squares are wider), so these are the measured tile edges, as fractions
+/// of the grid picture, left to right and top to bottom.
+const _colEdges = [
+  0.0, 108 / 884, 196 / 884, 290 / 884, 373 / 884, 462 / 884, //
+  542 / 884, 633 / 884, 713 / 884, 804 / 884, 1.0,
+];
+const _rowEdges = [
+  0.0, 155 / 1234, 281 / 1234, 414 / 1234, 532 / 1234, 657 / 1234, //
+  767 / 1234, 885 / 1234, 986 / 1234, 1105 / 1234, 1.0,
 ];
 
 /// Maps squares to pixels for a board drawn at [size].
@@ -28,13 +44,19 @@ class SnlGeometry {
   final Size size;
 
   double get frame => size.width * _frame;
-  double get cellW => (size.width - frame * 2) / 10;
-  double get cellH => (size.height - frame * 2) / 10;
+  double get gridW => size.width - frame * 2;
+  double get gridH => size.height - frame * 2;
+  double get cellW => gridW / 10;
+  double get cellH => gridH / 10;
 
-  /// Centre of square [n] (1..100).
+  /// Centre of square [n] (1..100), on the real tile.
   Offset centre(int n) {
     final c = snlCell(n);
-    return Offset(frame + (c.x + .5) * cellW, frame + (9 - c.y + .5) * cellH);
+    final row = 9 - c.y;
+    return Offset(
+      frame + (_colEdges[c.x] + _colEdges[c.x + 1]) / 2 * gridW,
+      frame + (_rowEdges[row] + _rowEdges[row + 1]) / 2 * gridH,
+    );
   }
 
   /// Points along the ride from [from] to [to]: straight up a ladder, or
@@ -118,13 +140,15 @@ class SnlBoardView extends StatelessWidget {
     );
   }
 
+  /// A ladder runs straight from the middle of its foot square to the
+  /// middle of its top square, upright or slanting.
   Widget _ladder(SnlGeometry g, SnlPiece p) {
     final foot = g.centre(p.from), top = g.centre(p.to);
     final d = top - foot;
+    final skin = p.skin % _ladderFiles.length;
     // Rails run a little past both squares.
-    final h = d.distance + g.cellH * .36;
-    final skin = _straightLadders[p.skin % _straightLadders.length];
-    final w = math.min(h * _ladderAspect[skin], g.cellW * .6);
+    final h = d.distance + g.cellH * .4;
+    final w = math.min(h * _ladderAspect[skin], g.cellW * .52);
     final mid = (foot + top) / 2 - Offset(g.frame, g.frame);
     return Positioned(
       left: mid.dx - w / 2,
@@ -132,34 +156,39 @@ class SnlBoardView extends StatelessWidget {
       width: w,
       height: h,
       child: Transform.rotate(
-        // Random boards only have upright ladders, so this is zero there.
         angle: math.atan2(d.dx, -d.dy),
         child: _shadowed(
-          Image.asset('assets/images/snl/ladder$skin.png',
+          Image.asset('assets/images/snl/ladder${_ladderFiles[skin]}.png',
               fit: BoxFit.fill, filterQuality: FilterQuality.medium),
         ),
       ),
     );
   }
 
-  /// A snake is never rotated: its picture is scaled (and mirrored when it
-  /// runs the other way) so the head sits on its square and the tail tip on
-  /// the square it drops to.
+  /// A slim snake lies along the line from its head square to its tail
+  /// square, head first, and is mirrored when it heads left so it is never
+  /// belly-up.
   Widget _snake(SnlGeometry g, SnlPiece p) {
-    final skin = snakeSkins[p.skin % snakeSkins.length];
-    final (l, t, r, b) = snakeBox(skin, p.from, p.to);
-    final tailLeft = snlCell(p.to).x < snlCell(p.from).x ||
-        (snlCell(p.to).x == snlCell(p.from).x && p.from.isOdd);
-    // The pictures' tails all point right unless noted by their anchors.
-    final mirrored = tailLeft != (skin.tx < skin.hx);
-    final rect =
-        Rect.fromLTRB(l * g.cellW, t * g.cellH, r * g.cellW, b * g.cellH);
-    return Positioned.fromRect(
-      rect: rect,
-      child: Transform.flip(
-        flipX: mirrored,
+    final (ratio, hx, hy, tx) = _snakes[p.skin % _snakes.length];
+    final head = g.centre(p.from) - Offset(g.frame, g.frame);
+    final tail = g.centre(p.to) - Offset(g.frame, g.frame);
+    final d = tail - head;
+    final w = d.distance / (tx - hx);
+    // Slim, but never so thin that the head is hard to see.
+    final h = (w * ratio).clamp(g.cellW * .36, g.cellW * .5);
+    final angle = math.atan2(d.dy, d.dx);
+    return Positioned(
+      left: head.dx - hx * w,
+      top: head.dy - hy * h,
+      width: w,
+      height: h,
+      child: Transform(
+        origin: Offset(hx * w, hy * h),
+        transform: Matrix4.identity()
+          ..rotateZ(angle)
+          ..scaleByDouble(1, angle.abs() > math.pi / 2 ? -1 : 1, 1, 1),
         child: _shadowed(
-          Image.asset('assets/images/snl/snake${p.skin % snakeSkins.length}.png',
+          Image.asset('assets/images/snl/snake${p.skin % _snakes.length}.png',
               fit: BoxFit.fill, filterQuality: FilterQuality.medium),
         ),
       ),
