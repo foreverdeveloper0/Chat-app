@@ -733,7 +733,7 @@ class _LogoLiveState extends State<_LogoLive>
                         border: Border.all(color: AppColors.goldSoft, width: 1),
                       ),
                       child: Text(
-                        'COMING SOON',
+                        widget.game.ready ? 'PLAY NOW' : 'COMING SOON',
                         style: AppText.title.copyWith(
                           fontSize: w * .085,
                           letterSpacing: 1.2,

@@ -20,6 +20,9 @@ enum Sfx {
   // Snakes & Ladders: climbing a ladder, sliding down a snake
   bonus,
   crash,
+  // Carrom: pieces knocking together, a piece dropping into a pocket
+  hit,
+  pocket,
 }
 
 abstract final class Sounds {

@@ -65,6 +65,7 @@ flutter:
     - assets/images/banners/
     - assets/images/logos/
     - assets/images/snl/
+    - assets/images/carrom/
     - assets/sounds/
 
   # To add assets to your application, add an assets section, like this:

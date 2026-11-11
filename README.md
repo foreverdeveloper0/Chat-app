@@ -39,7 +39,21 @@ Snakes & Ladders on a 10x10 board, opened from its tile or banner.
 - Same table as Ludo: 5 lives, a 20 second turn clock, finishing places,
   entry coins, quick messages.
 
-The other games on the hub (Carrom, 16 Ghuti, Car Racing, Fruit Cut, Poker)
+## Carrom
+
+Top-down carrom with real collisions, cushions and pockets.
+
+- Slide the striker along your baseline, pull back anywhere on the board to
+  aim and set the power, let go to shoot.
+- 1 vs Computer, 1 vs 1, 2 vs 2 with computer players, or 2 vs 2 on one
+  phone (partners sit opposite and share a colour). In same-phone games the
+  board turns to face whoever is playing.
+- Pocket your own coin to shoot again. Pocketing the striker is a foul (a
+  coin comes back). The Queen must be covered by pocketing one of your coins
+  with the next shot, and nobody can finish until the Queen is claimed.
+  First side to pocket all nine coins wins.
+
+The other games on the hub (16 Ghuti, Car Racing, Fruit Cut, Poker)
 are placeholders that say "coming soon".
 
 ## Run
