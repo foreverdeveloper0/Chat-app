@@ -28,16 +28,20 @@ void main() {
         ..pocketed = false
         ..pos = at;
 
-  test('racks nine white, nine black and the queen without overlaps', () {
+  test('racks nine white, nine black and the queen inside the ring, apart', () {
     final g = game();
     expect(g.pieces.where((p) => p.kind == PieceKind.white).length, 9);
     expect(g.pieces.where((p) => p.kind == PieceKind.black).length, 9);
     expect(g.queen.pos, Carrom.centre);
     for (final a in g.pieces) {
+      if (a == g.striker) continue;
+      // Every coin lies wholly inside the centre ring...
+      expect((a.pos - Carrom.centre).distance + a.radius,
+          lessThanOrEqualTo(Carrom.centreRing));
       for (final b in g.pieces) {
-        if (a != b) {
-          expect((a.pos - b.pos).distance,
-              greaterThanOrEqualTo(a.radius + b.radius - 1e-9));
+        // ...and none touches or overlaps another.
+        if (a != b && b != g.striker) {
+          expect((a.pos - b.pos).distance, greaterThan(a.radius + b.radius));
         }
       }
     }

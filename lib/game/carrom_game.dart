@@ -22,7 +22,11 @@ class CarromPiece {
 abstract final class Carrom {
   static const left = .110, right = .890, top = .1165, bottom = .8835;
   static const centre = Offset(.5, .5);
-  static const coinR = .0245, strikerR = .0315;
+  static const coinR = .021, strikerR = .029;
+
+  /// The inner edge of the black ring round the centre: the racked coins
+  /// must all sit inside it.
+  static const centreRing = .114;
   static const pockets = [
     Offset(.1252, .1292),
     Offset(.8757, .1300),
@@ -104,7 +108,8 @@ class CarromGame {
   int remaining(int team) => 9 - pocketed[team];
 
   void _rack() {
-    const gap = Carrom.coinR * 2.04;
+    // A hair of space between neighbours so no two coins ever overlap.
+    const gap = Carrom.coinR * 2.06;
     pieces.add(CarromPiece(PieceKind.queen, Carrom.centre));
     for (var i = 0; i < 6; i++) {
       final a = i * pi / 3 + pi / 6;
