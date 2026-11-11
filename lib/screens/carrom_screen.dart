@@ -60,6 +60,13 @@ class _CarromScreenState extends State<CarromScreen>
   Offset? _dragFrom, _dragTo;
   Timer? _botTimer;
   double _lastHit = 0, _clock = 0;
+
+  /// Recent striker positions while it is moving, for its light trail.
+  final _trail = <Offset>[];
+
+  /// Where and when the last shot was fired, for the launch burst.
+  Offset? _burstAt;
+  double _burstTime = -10;
   String _note = '';
   Timer? _noteTimer;
 
@@ -98,6 +105,12 @@ class _CarromScreenState extends State<CarromScreen>
     _clock += dt;
     final wasMoving = _game.moving;
     final ev = _game.step(dt);
+    if (_game.moving && !_game.striker.pocketed) {
+      _trail.add(_game.striker.pos);
+      if (_trail.length > 14) _trail.removeAt(0);
+    } else if (_trail.isNotEmpty) {
+      _trail.removeAt(0);
+    }
     if (ev.hit > .12 && _clock - _lastHit > .07) {
       _lastHit = _clock;
       Sounds.play(Sfx.hit);
@@ -165,7 +178,9 @@ class _CarromScreenState extends State<CarromScreen>
     setState(() {});
     _botTimer = Timer(const Duration(milliseconds: 550), () {
       if (!mounted) return;
-      if (!_game.shoot(shot.direction, shot.power)) {
+      if (_game.shoot(shot.direction, shot.power)) {
+        _fired();
+      } else {
         // The spot was blocked after all: try another.
         _game.placeStriker(_game.rng.nextDouble());
         _botTimer = Timer(const Duration(milliseconds: 200), _botPlay);
@@ -190,7 +205,15 @@ class _CarromScreenState extends State<CarromScreen>
     setState(() => _dragFrom = _dragTo = null);
     if (aim == null || !_humanTurn) return;
     if (!_game.strikerFree) return _say('Move the striker off the coin');
-    if (_game.shoot(aim.$1, aim.$2)) Sounds.play(Sfx.tap);
+    if (_game.shoot(aim.$1, aim.$2)) _fired();
+  }
+
+  void _fired() {
+    _burstAt = _game.striker.pos;
+    _burstTime = _clock;
+    _trail.clear();
+    Sounds.play(Sfx.hit);
+    HapticFeedback.lightImpact();
   }
 
   Future<void> _confirmLeave() async {
@@ -234,9 +257,12 @@ class _CarromScreenState extends State<CarromScreen>
         body: LudoBackdrop(
           child: SafeArea(
             child: LayoutBuilder(builder: (context, box) {
+              // Full width: the outer gold rim may run a hair past the
+              // screen edges so the playing surface is as big as possible.
               final board = math.min(
-                  math.min(box.maxWidth, 520.0) - 8, box.maxHeight - 300);
+                  math.min(box.maxWidth, 520.0) * 1.05, box.maxHeight - 250);
               return Stack(
+                clipBehavior: Clip.hardEdge,
                 children: [
                   Column(
                     children: [
@@ -249,7 +275,15 @@ class _CarromScreenState extends State<CarromScreen>
                       const SizedBox(height: 8),
                       _scoreBar(),
                       const Spacer(),
-                      _board(board),
+                      SizedBox(
+                        width: box.maxWidth,
+                        height: board,
+                        child: OverflowBox(
+                          maxWidth: board,
+                          minWidth: board,
+                          child: _board(board),
+                        ),
+                      ),
                       const Spacer(),
                       _controls(board),
                       const SizedBox(height: 10),
@@ -379,6 +413,9 @@ class _CarromScreenState extends State<CarromScreen>
                             aim: _humanTurn ? _aim : null,
                             ready: _humanTurn,
                             time: _clock,
+                            trail: _trail,
+                            burstAt: _burstAt,
+                            burstAge: _clock - _burstTime,
                           ),
                         ),
                       ),
@@ -390,9 +427,15 @@ class _CarromScreenState extends State<CarromScreen>
                                 ? (1 - p.sink / .22).clamp(0.0, 1.0)
                                 : 1.0;
                             final d = p.radius * 2 * size * k;
+                            // While aiming, the striker eases back along the
+                            // pull like a drawn slingshot.
+                            final aim = _humanTurn ? _aim : null;
+                            final at = p == _game.striker && aim != null
+                                ? p.pos - aim.$1 * (aim.$2 * Carrom.strikerR * .55)
+                                : p.pos;
                             return Positioned(
-                              left: p.pos.dx * size - d / 2,
-                              top: p.pos.dy * size - d / 2,
+                              left: at.dx * size - d / 2,
+                              top: at.dy * size - d / 2,
                               width: d,
                               height: d,
                               child: Image.asset(_pieceAsset[p.kind]!,
@@ -557,77 +600,279 @@ class _CarromScreenState extends State<CarromScreen>
       );
 }
 
-/// Shadows under the pieces, the glow around a ready striker and the aim
-/// guide, all in board coordinates.
+/// Shadows, the live-striker ring, the aim guide (with its predicted
+/// bounce and first contact), the power dial, the launch burst and the
+/// striker's light trail, all in board coordinates.
 class _TablePainter extends CustomPainter {
   const _TablePainter({
     required this.game,
     required this.aim,
     required this.ready,
     required this.time,
+    required this.trail,
+    required this.burstAt,
+    required this.burstAge,
   });
   final CarromGame game;
   final (Offset, double)? aim;
   final bool ready;
   final double time;
+  final List<Offset> trail;
+  final Offset? burstAt;
+  final double burstAge;
+
+  static const _cool = Color(0xFF45E3A6),
+      _warm = Color(0xFFFFD23A),
+      _hot = Color(0xFFFF4D4D);
+
+  Color _powerColour(double p) => p < .5
+      ? Color.lerp(_cool, _warm, p * 2)!
+      : Color.lerp(_warm, _hot, (p - .5) * 2)!;
 
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.width;
     final shadow = Paint()
-      ..color = const Color(0x59000000)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * .006);
+      ..color = const Color(0x66000000)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * .007);
     for (final p in game.pieces) {
       if (p.pocketed) continue;
       canvas.drawCircle(
-          (p.pos + const Offset(.004, .006)) * s, p.radius * s, shadow);
+          (p.pos + const Offset(.004, .007)) * s, p.radius * s * 1.02, shadow);
     }
+
+    // Light trail behind a moving striker.
+    for (var i = 0; i < trail.length; i++) {
+      final k = (i + 1) / trail.length;
+      canvas.drawCircle(
+        trail[i] * s,
+        Carrom.strikerR * s * (.35 + .6 * k),
+        Paint()
+          ..color = const Color(0xFF7FB2FF).withValues(alpha: .28 * k)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * .006),
+      );
+    }
+
+    // Launch burst: two expanding rings and a flash.
+    if (burstAt != null && burstAge < .45) {
+      final t = burstAge / .45, at = burstAt! * s;
+      final r = Carrom.strikerR * s;
+      canvas.drawCircle(
+        at,
+        r * (1 + t * 2.2),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = r * .35 * (1 - t)
+          ..color = const Color(0xFFFFE28A).withValues(alpha: 1 - t),
+      );
+      canvas.drawCircle(
+        at,
+        r * (1 + t * 3.4),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = r * .15 * (1 - t)
+          ..color = Colors.white.withValues(alpha: .7 * (1 - t)),
+      );
+      if (t < .3) {
+        canvas.drawCircle(
+          at,
+          r * 1.6,
+          Paint()
+            ..color = Colors.white.withValues(alpha: .35 * (1 - t / .3))
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * .8),
+        );
+      }
+    }
+
     if (!ready) return;
-    final at = game.striker.pos * s, r = Carrom.strikerR * s;
+    final r = Carrom.strikerR * s;
     final free = game.strikerFree;
-    // A breathing ring shows whose striker is live (red if it is blocked).
-    canvas.drawCircle(
-      at,
-      r * (1.25 + .08 * math.sin(time * 5)),
+    final a = aim;
+    final at = (a == null
+            ? game.striker.pos
+            : game.striker.pos - a.$1 * (a.$2 * Carrom.strikerR * .55)) *
+        s;
+
+    if (a == null) {
+      // Breathing halo and a slow spinning dashed ring on the live striker.
+      final c = free ? const Color(0xFFFFE28A) : _hot;
+      canvas.drawCircle(
+        at,
+        r * 1.55,
+        Paint()
+          ..color = c.withValues(alpha: .18 + .1 * math.sin(time * 4))
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * .6),
+      );
+      final ring = Rect.fromCircle(center: at, radius: r * 1.32);
+      final dash = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = r * .13
+        ..color = c;
+      for (var i = 0; i < 8; i++) {
+        canvas.drawArc(ring, time * 1.6 + i * math.pi / 4, math.pi / 7, false, dash);
+      }
+      return;
+    }
+
+    final (dir, power) = a;
+    final colour = _powerColour(power);
+
+    // Predicted path: the first piece it would meet, or the first cushion
+    // it would bounce off and where it would go next.
+    final from = game.striker.pos;
+    double? hitT;
+    CarromPiece? hitPiece;
+    for (final p in game.pieces) {
+      if (p == game.striker || p.pocketed) continue;
+      final rel = p.pos - from;
+      final along = rel.dx * dir.dx + rel.dy * dir.dy;
+      if (along <= 0) continue;
+      final off2 = rel.distanceSquared - along * along;
+      final reach = Carrom.strikerR + p.radius;
+      if (off2 > reach * reach) continue;
+      final t = along - math.sqrt(reach * reach - off2);
+      if (hitT == null || t < hitT) {
+        hitT = t;
+        hitPiece = p;
+      }
+    }
+    double wallT = double.infinity;
+    var bounce = dir;
+    final lo = Carrom.left + Carrom.strikerR, hi = Carrom.right - Carrom.strikerR;
+    final top = Carrom.top + Carrom.strikerR, bot = Carrom.bottom - Carrom.strikerR;
+    if (dir.dx > 1e-6) {
+      final t = (hi - from.dx) / dir.dx;
+      if (t < wallT) (wallT, bounce) = (t, Offset(-dir.dx, dir.dy));
+    } else if (dir.dx < -1e-6) {
+      final t = (lo - from.dx) / dir.dx;
+      if (t < wallT) (wallT, bounce) = (t, Offset(-dir.dx, dir.dy));
+    }
+    if (dir.dy > 1e-6) {
+      final t = (bot - from.dy) / dir.dy;
+      if (t < wallT) (wallT, bounce) = (t, Offset(dir.dx, -dir.dy));
+    } else if (dir.dy < -1e-6) {
+      final t = (top - from.dy) / dir.dy;
+      if (t < wallT) (wallT, bounce) = (t, Offset(dir.dx, -dir.dy));
+    }
+    final firstLeg = math.min(hitT ?? double.infinity, wallT);
+
+    // Moving dots along the guide (they flow in the shot direction).
+    void dots(Offset start, Offset d, double len, double fade0) {
+      const gap = .03;
+      final shift = (time * .09) % gap;
+      for (var t = shift; t < len; t += gap) {
+        final k = (1 - t / len) * fade0;
+        canvas.drawCircle(
+          (start + d * t) * s,
+          s * (.0042 + .0018 * k),
+          Paint()..color = Colors.white.withValues(alpha: .25 + .6 * k),
+        );
+      }
+    }
+
+    dots(from + dir * Carrom.strikerR, dir, firstLeg - Carrom.strikerR, 1);
+    if (hitT != null && hitT <= wallT) {
+      // Ghost striker at the contact point, and the line the piece will take.
+      final contact = from + dir * hitT;
+      canvas.drawCircle(
+        contact * s,
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = s * .004
+          ..color = Colors.white.withValues(alpha: .85),
+      );
+      final push = hitPiece!.pos - contact;
+      final n = push / push.distance;
+      final p0 = hitPiece.pos * s;
+      canvas.drawLine(
+        p0 + n * (hitPiece.radius * s),
+        p0 + n * (s * (.06 + .12 * power)),
+        Paint()
+          ..strokeWidth = s * .006
+          ..strokeCap = StrokeCap.round
+          ..color = colour.withValues(alpha: .9),
+      );
+    } else if (wallT.isFinite) {
+      final hit = from + dir * wallT;
+      canvas.drawCircle(hit * s, s * .007, Paint()..color = Colors.white);
+      dots(hit, bounce, .22, .55);
+    }
+
+    // The arrow: a glowing, tapered shaft whose length is the power.
+    final len = s * (.07 + .2 * power);
+    final base = at + dir * (r * 1.15);
+    final tip = base + dir * len;
+    final side = Offset(-dir.dy, dir.dx);
+    final shaft = Path()
+      ..moveTo(base.dx + side.dx * s * .005, base.dy + side.dy * s * .005)
+      ..lineTo(tip.dx + side.dx * s * .012, tip.dy + side.dy * s * .012)
+      ..lineTo(tip.dx + side.dx * s * .026, tip.dy + side.dy * s * .026)
+      ..lineTo(tip.dx + dir.dx * s * .04, tip.dy + dir.dy * s * .04)
+      ..lineTo(tip.dx - side.dx * s * .026, tip.dy - side.dy * s * .026)
+      ..lineTo(tip.dx - side.dx * s * .012, tip.dy - side.dy * s * .012)
+      ..lineTo(base.dx - side.dx * s * .005, base.dy - side.dy * s * .005)
+      ..close();
+    canvas.drawPath(
+      shaft,
+      Paint()
+        ..color = colour.withValues(alpha: .65)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * .012),
+    );
+    canvas.drawPath(
+      shaft,
+      Paint()
+        ..shader = LinearGradient(
+          colors: [Colors.white, colour],
+        ).createShader(Rect.fromPoints(base, tip + dir * s * .04)),
+    );
+    canvas.drawPath(
+      shaft,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = r * .16
-        ..color = (free ? const Color(0xFFFFE28A) : const Color(0xFFFF4D4D))
-            .withValues(alpha: .9),
+        ..strokeWidth = s * .0025
+        ..strokeJoin = StrokeJoin.round
+        ..color = const Color(0xCC1A1030),
     );
-    final a = aim;
-    if (a == null) return;
-    final (dir, power) = a;
-    // Dotted guide, then a solid arrow whose length is the power.
-    final dot = Paint()..color = const Color(0xCCFFFFFF);
-    for (var i = 1; i <= 16; i++) {
-      canvas.drawCircle(at + dir * (r + i * s * .028), s * .0045, dot);
-    }
-    final tip = at + dir * (r + s * (.05 + .22 * power));
-    final line = Paint()
-      ..strokeWidth = s * .012
-      ..strokeCap = StrokeCap.round
-      ..color = Color.lerp(
-          const Color(0xFF45E3A6), const Color(0xFFFF4D4D), power)!;
-    canvas.drawLine(at + dir * r, tip, line);
-    final side = Offset(-dir.dy, dir.dx);
-    canvas.drawPath(
-      Path()
-        ..moveTo(tip.dx + dir.dx * s * .03, tip.dy + dir.dy * s * .03)
-        ..lineTo(tip.dx + side.dx * s * .018, tip.dy + side.dy * s * .018)
-        ..lineTo(tip.dx - side.dx * s * .018, tip.dy - side.dy * s * .018)
-        ..close(),
-      Paint()..color = line.color,
-    );
-    // The pull-back band behind the striker.
-    canvas.drawLine(
-      at,
-      at - dir * (s * .30 * power + r),
+
+    // Power dial wrapped round the striker.
+    final dial = Rect.fromCircle(center: at, radius: r * 1.45);
+    canvas.drawArc(
+      dial,
+      0,
+      2 * math.pi,
+      false,
       Paint()
-        ..strokeWidth = s * .006
-        ..strokeCap = StrokeCap.round
-        ..color = const Color(0x99FFFFFF),
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * .28
+        ..color = const Color(0x8C0F1136),
     );
+    final start = math.atan2(-dir.dy, -dir.dx) - power * math.pi;
+    canvas.drawArc(
+      dial,
+      start,
+      power * 2 * math.pi,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = r * .28
+        ..shader = SweepGradient(
+          colors: const [_cool, _warm, _hot],
+          transform: GradientRotation(start),
+        ).createShader(dial),
+    );
+
+    // Elastic band from the striker back toward the finger.
+    final back = at - dir * (r + s * .2 * power);
+    final band = Paint()
+      ..strokeWidth = s * .005
+      ..strokeCap = StrokeCap.round
+      ..color = Colors.white.withValues(alpha: .6);
+    canvas.drawLine(at - dir * r + side * r * .6, back, band);
+    canvas.drawLine(at - dir * r - side * r * .6, back, band);
+    canvas.drawCircle(back, s * .009, Paint()..color = Colors.white);
   }
 
   @override

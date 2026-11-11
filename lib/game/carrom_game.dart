@@ -22,7 +22,7 @@ class CarromPiece {
 abstract final class Carrom {
   static const left = .110, right = .890, top = .1165, bottom = .8835;
   static const centre = Offset(.5, .5);
-  static const coinR = .0191, strikerR = .0247;
+  static const coinR = .0215, strikerR = .0285;
   static const pockets = [
     Offset(.1252, .1292),
     Offset(.8757, .1300),
@@ -92,7 +92,10 @@ class CarromGame {
 
   final _shot = _Tally();
 
-  int teamOf(int seat) => seat.isEven ? 0 : 1;
+  /// White (0) or black (1). Partners sit opposite each other in a
+  /// four-player game; with two players each has a colour of their own.
+  int teamOf(int seat) =>
+      seats.length == 2 ? seats.indexOf(seat) : (seat.isEven ? 0 : 1);
   int get team => teamOf(current);
   bool isBot(int seat) => bots.contains(seat);
   PieceKind colourOf(int team) => team == 0 ? PieceKind.white : PieceKind.black;

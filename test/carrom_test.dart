@@ -146,6 +146,12 @@ void main() {
     expect(g.current, 2);
   });
 
+  test('two players each get their own colour', () {
+    final g = game();
+    expect(g.teamOf(0), 0);
+    expect(g.teamOf(2), 1);
+  });
+
   test('four players: partners share a colour and turns go round', () {
     final g = game([0, 1, 2, 3]);
     expect(g.teamOf(0), g.teamOf(2));
