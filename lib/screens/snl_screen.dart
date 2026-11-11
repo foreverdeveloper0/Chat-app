@@ -157,12 +157,13 @@ class _SnlScreenState extends State<SnlScreen> with TickerProviderStateMixin {
               listenable: _game,
               builder: (context, _) => LayoutBuilder(
                 builder: (context, box) {
-                  // The board is taller than it is wide.
-                  final boardH = math.min(box.maxHeight - 350,
-                      (math.min(box.maxWidth, 520.0) - 16) / snlAspect);
-                  final boardSize = Size(boardH * snlAspect, boardH);
-                  final board = math.min(box.maxWidth - 16,
-                      math.max(boardSize.width, PlayerPanel.width * 2 + 12));
+                  // The board takes the full width; on a short screen it
+                  // is drawn a little squatter rather than narrower.
+                  final board = math.min(box.maxWidth, 520.0) - 12;
+                  final boardSize = Size(
+                      board,
+                      math.min(board / snlAspect,
+                          math.max(box.maxHeight - 336, board * 1.05)));
                   return Stack(
                     children: [
                       Column(

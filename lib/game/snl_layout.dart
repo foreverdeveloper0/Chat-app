@@ -25,15 +25,13 @@ class SnakeSkin {
 }
 
 const snakeSkins = [
-  SnakeSkin(354, 420, .202, .116, .975, .998, [(2, 2), (3, 3)]),
+  SnakeSkin(354, 420, .202, .116, .975, .998, [(2, 2)]),
   SnakeSkin(420, 414, .149, .108, .988, .937, [(2, 3)]),
   SnakeSkin(207, 420, .649, .116, .498, .998, [(2, 0), (3, 0)]),
-  SnakeSkin(335, 420, .451, .122, .197, .998, [(3, 1)]),
-  SnakeSkin(420, 350, .195, .120, .948, .903, [(2, 3)]),
 ];
 
 /// Squares on the board artwork are this much taller than they are wide.
-const snlTall = 1.396;
+const snlTall = 1.3;
 
 /// The picture's box for a snake from [head] to [tail], in board units
 /// (columns across, visual rows down): left, top, right, bottom.
@@ -76,11 +74,11 @@ class SnlLayout {
     SnlPiece(27, 5, 0),
     SnlPiece(40, 3, 1),
     SnlPiece(43, 18, 2),
-    SnlPiece(54, 31, 3),
-    SnlPiece(66, 45, 4),
+    SnlPiece(54, 31, 0),
+    SnlPiece(66, 45, 1),
     SnlPiece(76, 58, 0),
     SnlPiece(89, 53, 2),
-    SnlPiece(99, 41, 3),
+    SnlPiece(99, 41, 1),
   ]);
 
   /// A fresh, fair board. Ladders stand straight up their column; every

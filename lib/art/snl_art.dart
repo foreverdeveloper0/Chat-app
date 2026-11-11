@@ -4,13 +4,17 @@ import 'package:flutter/material.dart';
 
 import '../game/snl_layout.dart';
 
-const snlBoardAsset = 'assets/images/snl/board.png';
+const snlGridAsset = 'assets/images/snl/grid.jpg';
 
-/// Width / height of the board artwork (crown and frame included).
-const snlAspect = 941 / 1447;
+/// Natural width / height of the framed board. It may be drawn a little
+/// squatter than this to use the full width of a short screen.
+const snlAspect = .72;
 
-/// Where the 10x10 grid sits inside the artwork, as fractions of its size.
-const _gridLeft = .0319, _gridWidth = .9394, _gridTop = .0919, _gridHeight = .8528;
+/// The gold frame's thickness as a fraction of the board's width.
+const _frame = .022;
+
+/// Front-facing ladder pictures (the others are drawn at an angle).
+const _straightLadders = [0, 5, 7, 8];
 
 /// Width / height of each upright ladder image.
 const _ladderAspect = [
@@ -23,16 +27,14 @@ class SnlGeometry {
   const SnlGeometry(this.size);
   final Size size;
 
-  double get cellW => size.width * _gridWidth / 10;
-  double get cellH => size.height * _gridHeight / 10;
+  double get frame => size.width * _frame;
+  double get cellW => (size.width - frame * 2) / 10;
+  double get cellH => (size.height - frame * 2) / 10;
 
   /// Centre of square [n] (1..100).
   Offset centre(int n) {
     final c = snlCell(n);
-    return Offset(
-      size.width * _gridLeft + (c.x + .5) * cellW,
-      size.height * _gridTop + (9 - c.y + .5) * cellH,
-    );
+    return Offset(frame + (c.x + .5) * cellW, frame + (9 - c.y + .5) * cellH);
   }
 
   /// Points along the ride from [from] to [to]: straight up a ladder, or
@@ -64,23 +66,45 @@ class SnlBoardView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final g = SnlGeometry(size);
-    return SizedBox.fromSize(
-      size: size,
+    final grid = Rect.fromLTWH(
+        g.frame, g.frame, size.width - g.frame * 2, size.height - g.frame * 2);
+    return Container(
+      width: size.width,
+      height: size.height,
+      // A plain gold frame hugging the grid: no crown, no ornaments.
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(g.frame * 2.2),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFFFF3B8),
+            Color(0xFFE3B341),
+            Color(0xFFFFE28A),
+            Color(0xFF9C6B0E),
+            Color(0xFFE9C46A),
+          ],
+          stops: [0, .3, .55, .82, 1],
+        ),
+        boxShadow: const [
+          BoxShadow(color: Color(0x99000010), blurRadius: 18, offset: Offset(0, 8)),
+        ],
+      ),
       child: Stack(
-        clipBehavior: Clip.none,
         children: [
-          Positioned.fill(
-            child: Image.asset(snlBoardAsset,
-                fit: BoxFit.fill, filterQuality: FilterQuality.medium),
-          ),
-          // Nothing may spill over the gold frame: pieces are clipped to
-          // the playing grid. Ladders lie under the snakes.
-          Positioned.fill(
+          Positioned.fromRect(
+            rect: grid,
             child: ClipRRect(
-              clipper: _GridClipper(),
+              borderRadius: BorderRadius.circular(g.frame * 1.2),
+              // Pieces are clipped to the grid so nothing spills over the
+              // frame. Ladders lie under the snakes.
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
+                  Positioned.fill(
+                    child: Image.asset(snlGridAsset,
+                        fit: BoxFit.fill, filterQuality: FilterQuality.medium),
+                  ),
                   for (final p in layout.pieces)
                     if (!p.snake) _ladder(g, p),
                   for (final p in layout.pieces)
@@ -99,8 +123,9 @@ class SnlBoardView extends StatelessWidget {
     final d = top - foot;
     // Rails run a little past both squares.
     final h = d.distance + g.cellH * .36;
-    final w = math.min(h * _ladderAspect[p.skin], g.cellW * .66);
-    final mid = (foot + top) / 2;
+    final skin = _straightLadders[p.skin % _straightLadders.length];
+    final w = math.min(h * _ladderAspect[skin], g.cellW * .6);
+    final mid = (foot + top) / 2 - Offset(g.frame, g.frame);
     return Positioned(
       left: mid.dx - w / 2,
       top: mid.dy - h / 2,
@@ -110,7 +135,7 @@ class SnlBoardView extends StatelessWidget {
         // Random boards only have upright ladders, so this is zero there.
         angle: math.atan2(d.dx, -d.dy),
         child: _shadowed(
-          Image.asset('assets/images/snl/ladder${p.skin}.png',
+          Image.asset('assets/images/snl/ladder$skin.png',
               fit: BoxFit.fill, filterQuality: FilterQuality.medium),
         ),
       ),
@@ -127,12 +152,8 @@ class SnlBoardView extends StatelessWidget {
         (snlCell(p.to).x == snlCell(p.from).x && p.from.isOdd);
     // The pictures' tails all point right unless noted by their anchors.
     final mirrored = tailLeft != (skin.tx < skin.hx);
-    final rect = Rect.fromLTRB(
-      size.width * _gridLeft + l * g.cellW,
-      size.height * _gridTop + t * g.cellH,
-      size.width * _gridLeft + r * g.cellW,
-      size.height * _gridTop + b * g.cellH,
-    );
+    final rect =
+        Rect.fromLTRB(l * g.cellW, t * g.cellH, r * g.cellW, b * g.cellH);
     return Positioned.fromRect(
       rect: rect,
       child: Transform.flip(
@@ -163,16 +184,4 @@ class SnlBoardView extends StatelessWidget {
           image,
         ],
       );
-}
-
-class _GridClipper extends CustomClipper<RRect> {
-  @override
-  RRect getClip(Size size) => RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * _gridLeft, size.height * _gridTop,
-            size.width * _gridWidth, size.height * _gridHeight),
-        Radius.circular(size.width * .03),
-      );
-
-  @override
-  bool shouldReclip(_GridClipper old) => false;
 }
