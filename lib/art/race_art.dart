@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -110,9 +111,7 @@ class RaceScenePainter extends CustomPainter {
   /// screen, as fractions of the height: the car sits above the controls.
   static const horizon = .3, ground = .8;
 
-  /// How much a car seen from above is squashed by the low camera.
-  static const _carSquash = .64;
-  static const _carWidth = 620.0;
+  static const _carWidth = 800.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -170,9 +169,11 @@ class RaceScenePainter extends CustomPainter {
     }
 
     // Road far to near, so nearer segments cover farther ones.
+    _verts = 0;
     for (final v in visible.reversed) {
-      _segment(canvas, w, v);
+      _segment(w, v);
     }
+    _flushRoad(canvas);
 
     // Scenery and rival cars, far to near, each clipped by the road in
     // front of it.
@@ -184,8 +185,12 @@ class RaceScenePainter extends CustomPainter {
     for (final v in visible.reversed) {
       final here = cars[v.seg.index];
       if (v.seg.props.isEmpty && here == null) continue;
-      canvas.save();
-      canvas.clipRect(Rect.fromLTRB(0, 0, w, v.clip));
+      // Only things whose feet are behind a nearer hill need clipping.
+      final hidden = v.p1.$2 > v.clip + .5;
+      if (hidden) {
+        canvas.save();
+        canvas.clipRect(Rect.fromLTRB(0, 0, w, v.clip));
+      }
       final unit = v.p1.$4 * w / 2;
       for (final (k, prop) in v.seg.props.indexed) {
         if (g.taken(v.seg, k)) continue;
@@ -202,7 +207,7 @@ class RaceScenePainter extends CustomPainter {
         final sy = v.p1.$2 + (v.p2.$2 - v.p1.$2) * pct;
         _car(canvas, Offset(sx, sy), _carWidth * sc * w / 2, r, t, false);
       }
-      canvas.restore();
+      if (hidden) canvas.restore();
     }
 
     // The player's car, bobbing a little with speed and more off-road.
@@ -245,27 +250,37 @@ class RaceScenePainter extends CustomPainter {
       );
       return;
     }
-    final height = width * img.height / img.width * _carSquash;
-    final dst = Rect.fromLTWH(-width / 2, -height, width, height);
+    final height = width * img.height / img.width;
     canvas.save();
     canvas.translate(at.dx, at.dy);
-    // Turn about the middle of the car.
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(0, -height * .04),
+        width: width * 1.02,
+        height: height * .26,
+      ),
+      Paint()..color = const Color(0x55000000),
+    );
+    // Lean a little into the turn, about the middle of the car.
     canvas.translate(0, -height / 2);
-    canvas.rotate(r.steer * .16);
-    canvas.translate(0, height / 2);
+    canvas.rotate(r.steer * .07);
+    canvas.translate(r.steer * width * .03, height / 2);
     if (boost) {
+      // Nitro: blue jets trailing behind.
       for (final s in [-1.0, 1.0]) {
-        final e = Offset(s * width * .17, -height * .06);
-        final len = height * (.5 + .12 * math.sin(t * 60 + s));
-        final flame = Path()
-          ..moveTo(e.dx - width * .07, e.dy)
-          ..quadraticBezierTo(e.dx, e.dy + len * 1.6, e.dx + width * .07, e.dy)
-          ..close();
+        final e = Offset(s * width * .2, -height * .1);
+        final len = height * (.55 + .14 * math.sin(t * 60 + s));
         canvas.drawPath(
-          flame,
-          Paint()
-            ..color = const Color(0xCC3FA9FF)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * .04),
+          Path()
+            ..moveTo(e.dx - width * .07, e.dy)
+            ..quadraticBezierTo(
+              e.dx,
+              e.dy + len * 1.5,
+              e.dx + width * .07,
+              e.dy,
+            )
+            ..close(),
+          Paint()..color = const Color(0x993FA9FF),
         );
         canvas.drawPath(
           Path()
@@ -279,23 +294,19 @@ class RaceScenePainter extends CustomPainter {
     canvas.drawImageRect(
       img,
       Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
-      dst,
-      Paint()..filterQuality = FilterQuality.medium,
+      Rect.fromLTWH(-width / 2, -height, width, height),
+      Paint()..filterQuality = FilterQuality.low,
     );
     if (r.braking) {
-      for (final s in [-1.0, 1.0]) {
-        final c = Offset(s * width * .27, -height * .12);
-        canvas.drawOval(
-          Rect.fromCenter(center: c, width: width * .3, height: height * .14),
-          Paint()
-            ..color = const Color(0xDDFF2A2A)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * .05),
-        );
-        canvas.drawOval(
-          Rect.fromCenter(center: c, width: width * .14, height: height * .05),
-          Paint()..color = const Color(0xFFFFD0D0),
-        );
-      }
+      // Braking: a red glow under the car.
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(0, -height * .03),
+          width: width * .9,
+          height: height * .16,
+        ),
+        Paint()..color = const Color(0x88FF2A2A),
+      );
     }
     canvas.restore();
   }
@@ -375,7 +386,7 @@ class RaceScenePainter extends CustomPainter {
       int seed,
     ) {
       final path = Path()..moveTo(0, h);
-      for (var x = 0.0; x <= w + 4; x += 4) {
+      for (var x = 0.0; x <= w + 8; x += 8) {
         final u = (x / w) + off * par;
         final y =
             baseY -
@@ -431,39 +442,83 @@ class RaceScenePainter extends CustomPainter {
   Color _hazed(Color c, double f) =>
       Color.lerp(c, _haze, (f * f * .55).clamp(0.0, .55))!;
 
-  void _segment(Canvas canvas, double w, _Proj v) {
+  // The whole road goes to the GPU as one batch of coloured triangles:
+  // thousands of separate shapes a frame is what made fast driving stutter.
+  static final _xy = Float32List(_maxVerts * 2);
+  static final _rgba = Int32List(_maxVerts);
+  static const _maxVerts = 24000;
+  int _verts = 0;
+
+  void _quad(
+    double ax,
+    double bx,
+    double ay,
+    double cx,
+    double dx,
+    double cy,
+    int colour,
+  ) {
+    if (_verts + 6 > _maxVerts) return;
+    var i = _verts * 2;
+    void v(double x, double y) {
+      _xy[i++] = x;
+      _xy[i++] = y;
+    }
+
+    v(ax, ay);
+    v(bx, ay);
+    v(dx, cy);
+    v(ax, ay);
+    v(dx, cy);
+    v(cx, cy);
+    _rgba.fillRange(_verts, _verts + 6, colour);
+    _verts += 6;
+  }
+
+  void _flushRoad(Canvas canvas) {
+    if (_verts == 0) return;
+    canvas.drawVertices(
+      ui.Vertices.raw(
+        ui.VertexMode.triangles,
+        Float32List.sublistView(_xy, 0, _verts * 2),
+        colors: Int32List.sublistView(_rgba, 0, _verts),
+      ),
+      BlendMode.dst,
+      Paint()..isAntiAlias = false,
+    );
+    _verts = 0;
+  }
+
+  void _segment(double w, _Proj v) {
     final (x1, y1, w1, _) = v.p1;
     final (x2, y2, w2, _) = v.p2;
     final band = v.seg.index ~/ RaceGame.rumbleLen;
     final dark = band.isEven;
     final f = v.fog;
-    // No anti-aliasing: it would leave hairline seams between segments.
-    Paint ink(Color c) => Paint()
-      ..color = _hazed(c, f)
-      ..isAntiAlias = false;
-    canvas.drawRect(
-      Rect.fromLTRB(0, y2, w, y1 + 1),
+    final near = y1 + 1; // overlap a pixel so no seams show
+    int ink(Color c) => _hazed(c, f).toARGB32();
+    _quad(
+      0,
+      w,
+      near,
+      0,
+      w,
+      y2,
       ink(dark ? const Color(0xFF6CC72F) : const Color(0xFF61BA29)),
     );
-    Path quad(double a1, double a2, double b1, double b2) => Path()
-      ..moveTo(a1, y1 + 1)
-      ..lineTo(a2, y1 + 1)
-      ..lineTo(b2, y2)
-      ..lineTo(b1, y2)
-      ..close();
     // A strip between two fractions of the road's half-width.
-    void strip(double a, double b, Color c) => canvas.drawPath(
-      quad(x1 + w1 * a, x1 + w1 * b, x2 + w2 * a, x2 + w2 * b),
+    void strip(double a, double b, Color c) => _quad(
+      x1 + w1 * a,
+      x1 + w1 * b,
+      near,
+      x2 + w2 * a,
+      x2 + w2 * b,
+      y2,
       ink(c),
     );
 
     // Kerbs: a dark outer lip, then chunky red and white blocks.
     strip(-1.2, 1.2, dark ? const Color(0xFF4E9A22) : const Color(0xFF468D1E));
-    strip(
-      -1.16,
-      1.16,
-      dark ? const Color(0xFFB8BCC4) : const Color(0xFFA01818),
-    );
     strip(
       -1.14,
       1.14,
@@ -510,7 +565,8 @@ class RaceScenePainter extends CustomPainter {
     final img = RaceSprites.of(name);
     if (img == null) return;
     final full = u(img.width * perPixel);
-    if (full < 1.5) return;
+    // Tiny far-off things are not worth a draw call.
+    if (full < (prop.kind == Prop.tree ? 3 : 5)) return;
     final height = full * img.height / img.width;
     // Coins spin on the spot.
     final width = prop.kind == Prop.coin
@@ -526,7 +582,7 @@ class RaceScenePainter extends CustomPainter {
     // Fade in out of the haze instead of popping up.
     final alpha = (1 - (fog - .7) / .3).clamp(0.0, 1.0);
     if (alpha <= 0) return;
-    if (alpha == 1 && prop.kind != Prop.flower) {
+    if (alpha == 1 && full > 24 && prop.kind != Prop.flower) {
       canvas.drawOval(
         Rect.fromCenter(center: at, width: width * .8, height: width * .12),
         Paint()..color = const Color(0x38000000),

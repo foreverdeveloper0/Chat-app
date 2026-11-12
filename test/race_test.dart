@@ -27,9 +27,14 @@ void main() {
 
   test('accelerates to top speed and the brake slows it', () {
     final g = game(0);
+    // An empty road, so nothing knocks speed off along the way.
+    for (final seg in g.segments) {
+      seg.props.removeWhere((p) => p.onRoad || p.pickup);
+    }
     final input = RaceInput()..gas = true;
     for (var i = 0; i < 60 * 8; i++) {
-      g.player.x = 0;
+      // Between two lanes, clear of anything lying on the road.
+      g.player.x = .31;
       g.update(1 / 60, input);
     }
     expect(g.player.speed, closeTo(RaceGame.maxSpeed, RaceGame.maxSpeed * .02));
@@ -63,7 +68,7 @@ void main() {
       g.update(1 / 60, input);
       fastest = max(fastest, g.player.speed);
     }
-    expect(fastest, greaterThan(RaceGame.maxSpeed * 1.2));
+    expect(fastest, greaterThan(RaceGame.maxSpeed * 1.15));
     expect(g.nitro, 0);
   });
 

@@ -78,7 +78,7 @@ It is not full 3D: the cars and scenery are flat pictures on a projected road.
 - Hold GAS to go and ◀ / ▶ to steer. BRAKE slows the car (the brake
   lights come on) and, once stopped, backs it up. NITRO gives a burst of
   speed; the bar refills slowly, or at once from a nitro bottle. Top speed
-  is 200 km/h, more on nitro. Keys: arrows or WASD, space for nitro.
+  is 150 km/h, more on nitro. Keys: arrows or WASD, space for nitro.
 - Coins on the road are counted in the HUD. Cones, barrels, tyres,
   barriers and hay bales cost speed and are knocked away. Grass is slow,
   and a fence along the verge keeps the car where it can steer back on.

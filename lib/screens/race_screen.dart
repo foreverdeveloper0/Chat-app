@@ -42,6 +42,10 @@ class _RaceScreenState extends State<RaceScreen>
   late RaceGame _game;
   late final Ticker _ticker = createTicker(_tick);
   final _frame = ValueNotifier(0);
+
+  /// The HUD is rebuilt a few times a second, not every frame.
+  final _hudTick = ValueNotifier(0);
+  double _hudWait = 0, _lastCoin = -1;
   final _input = RaceInput();
   final _focus = FocusNode();
   Duration _last = Duration.zero;
@@ -85,6 +89,7 @@ class _RaceScreenState extends State<RaceScreen>
   void dispose() {
     _ticker.dispose();
     _frame.dispose();
+    _hudTick.dispose();
     _focus.dispose();
     super.dispose();
   }
@@ -131,7 +136,10 @@ class _RaceScreenState extends State<RaceScreen>
       Sounds.play(Sfx.hit);
       HapticFeedback.lightImpact();
     }
-    if (ev.coin) Sounds.play(Sfx.pocket);
+    if (ev.coin && _clock - _lastCoin > .15) {
+      _lastCoin = _clock;
+      Sounds.play(Sfx.pocket);
+    }
     if (ev.refill) Sounds.play(Sfx.bonus);
     if (ev.finished) {
       final pos = _game.positionOf(p);
@@ -148,6 +156,11 @@ class _RaceScreenState extends State<RaceScreen>
       if (_sinceFinish > 2.6) setState(() => _results = true);
     }
     _frame.value++;
+    _hudWait -= dt;
+    if (_hudWait <= 0 || !_game.started || _flashT > 0) {
+      _hudWait = .1;
+      _hudTick.value++;
+    }
   }
 
   KeyEventResult _key(FocusNode _, KeyEvent e) {
@@ -198,7 +211,7 @@ class _RaceScreenState extends State<RaceScreen>
             ),
             SafeArea(
               child: ValueListenableBuilder(
-                valueListenable: _frame,
+                valueListenable: _hudTick,
                 builder: (context, _, _) => _hud(),
               ),
             ),
@@ -223,7 +236,7 @@ class _RaceScreenState extends State<RaceScreen>
     final g = _game, p = g.player;
     final pos = g.positionOf(p);
     final lap = (p.lap + 1).clamp(1, widget.laps);
-    final kmh = (p.speed.abs() / RaceGame.maxSpeed * 200).round();
+    final kmh = (p.speed.abs() / RaceGame.maxSpeed * RaceGame.topKmh).round();
     final t = g.time;
     String clock(double s) =>
         '${(s ~/ 60)}:${(s % 60).floor().toString().padLeft(2, '0')}.${((s * 10) % 10).floor()}';

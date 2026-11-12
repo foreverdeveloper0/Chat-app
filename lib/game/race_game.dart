@@ -148,8 +148,11 @@ class RaceGame {
   static const cameraHeight = 1300.0;
   static const cameraDepth = .84; // 1 / tan(fov / 2) for a 100 degree view
   static const playerZ = cameraHeight * cameraDepth;
-  static const drawDistance = 260;
-  static const maxSpeed = segLen * 60; // one segment per frame at 60 fps
+  static const drawDistance = 170;
+  static const maxSpeed = segLen * 46;
+
+  /// What the speedometer reads at [maxSpeed].
+  static const topKmh = 150;
   static const accel = maxSpeed / 5;
   static const braking = -maxSpeed;
   static const decel = -maxSpeed / 5;
@@ -269,7 +272,7 @@ class RaceGame {
         s.props.add(RoadProp(Prop.sign, i.isEven ? -1.3 : 1.3, rng.nextInt(2)));
       }
       for (final side in const [-1, 1]) {
-        if (i.isEven && rng.nextDouble() < .55) {
+        if (i.isEven && rng.nextDouble() < .42) {
           s.props.add(
             RoadProp(
               Prop.tree,
@@ -278,7 +281,7 @@ class RaceGame {
             ),
           );
         }
-        if (rng.nextDouble() < .35) {
+        if (rng.nextDouble() < .22) {
           s.props.add(
             RoadProp(
               Prop.bush,
@@ -287,7 +290,7 @@ class RaceGame {
             ),
           );
         }
-        if (rng.nextDouble() < .45) {
+        if (rng.nextDouble() < .3) {
           s.props.add(
             RoadProp(
               Prop.flower,
@@ -412,7 +415,7 @@ class RaceGame {
     final rolling = p.speed > 0;
     p.boosting = input.nitro && nitro > 0 && !input.brake && rolling;
     p.braking = input.brake && rolling;
-    final top = p.boosting ? maxSpeed * 1.3 : maxSpeed;
+    final top = p.boosting ? maxSpeed * 1.2 : maxSpeed;
     if (input.brake) {
       // Brake to a stop, then back up.
       p.speed += (rolling ? braking : -accel) * dt;
