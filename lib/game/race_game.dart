@@ -17,6 +17,8 @@ enum Prop {
   barrier,
   hay,
   arch,
+  coin,
+  nitro,
 }
 
 class RoadProp {
@@ -35,17 +37,8 @@ class RoadProp {
     _ => false,
   };
 
-  /// Whether driving into it off the road is a crash. Bushes, flowers and
-  /// flags are soft.
-  bool get solid => switch (kind) {
-    Prop.tree ||
-    Prop.rock ||
-    Prop.fence ||
-    Prop.lamp ||
-    Prop.sign ||
-    Prop.chevron => true,
-    _ => false,
-  };
+  /// Things to drive through and collect.
+  bool get pickup => kind == Prop.coin || kind == Prop.nitro;
 
   /// A heavy thing on the road costs more speed than a light one.
   bool get heavy =>
@@ -63,6 +56,7 @@ class RoadProp {
     Prop.fence => .22,
     Prop.lamp => .06,
     Prop.sign || Prop.chevron => .12,
+    Prop.coin || Prop.nitro => .1,
     _ => 0,
   };
 }
@@ -102,18 +96,24 @@ class Racer {
   /// Steering and braking right now, for drawing.
   double steer = 0;
   bool braking = false, boosting = false;
+  bool get reversing => speed < 0;
 
   /// Seconds left of a spin-out after a hard hit.
   double stun = 0;
 }
 
 class RaceInput {
-  bool left = false, right = false, brake = false, nitro = false;
+  bool left = false, right = false, nitro = false;
+
+  /// The car only pulls away while the gas is held. The brake slows it,
+  /// and once stopped backs it up.
+  bool gas = false, brake = false;
 }
 
 /// What happened in one update, for sounds and shakes.
 class RaceEvents {
   bool bump = false, crash = false, lap = false, finished = false;
+  bool coin = false, refill = false;
 }
 
 /// A circuit race seen from behind the player's car.
@@ -154,7 +154,11 @@ class RaceGame {
   static const braking = -maxSpeed;
   static const decel = -maxSpeed / 5;
   static const offRoadDecel = -maxSpeed / 2;
-  static const offRoadLimit = maxSpeed / 4;
+  static const offRoadLimit = maxSpeed / 3;
+  static const reverseLimit = maxSpeed / 4;
+
+  /// How far past the kerb the verge goes before the fence.
+  static const verge = 1.3;
   static const centrifugal = .2;
 
   /// Steering: how fast the wheel turns and returns (per second), and the
@@ -177,6 +181,13 @@ class RaceGame {
 
   /// 0..1 nitro left; it refills slowly.
   double nitro = 1;
+
+  /// Coins picked up this race.
+  int coins = 0;
+
+  /// Obstacles knocked away and pickups collected, so each acts once.
+  final _taken = <int>{};
+  bool taken(Segment s, int prop) => _taken.contains(s.index * 64 + prop);
 
   /// Order racers crossed the line in.
   final finishers = <Racer>[];
@@ -295,6 +306,13 @@ class RaceGame {
           );
         }
       }
+      // Rows of coins, and now and then a nitro bottle.
+      if (i > 30 && i < n - 20 && i % 2 == 0 && (i % 46) < 10) {
+        s.props.add(RoadProp(Prop.coin, ((i ~/ 46) % 3 - 1) * .62));
+      }
+      if (i > 60 && i % 130 == 65) {
+        s.props.add(RoadProp(Prop.nitro, ((i ~/ 130) % 3 - 1) * .62));
+      }
       // Things on the tarmac to steer round, never near the start.
       if (i > 80 && i < n - 30 && i % 37 == 0) {
         final lane = (rng.nextInt(3) - 1) * .62;
@@ -355,7 +373,10 @@ class RaceGame {
       r.isPlayer ? _drivePlayer(r, dt, input, ev) : _driveBot(r, dt);
       final before = r.z;
       r.z = _wrap(r.z + r.speed * dt);
-      if (r.z < before) {
+      if (r.speed < 0) {
+        // Backing over the line undoes the lap.
+        if (r.z > before) r.lap--;
+      } else if (r.z < before) {
         r.lap++;
         if (r.isPlayer && r.lap > 0) ev.lap = true;
         if (r.lap >= laps) {
@@ -382,20 +403,29 @@ class RaceGame {
     p.steer += (want - p.steer) * (1 - exp(-rate * dt));
     if (want == 0 && p.steer.abs() < .01) p.steer = 0;
     // Sideways speed barely depends on road speed once the car is rolling.
-    final grip = min(1.0, pct * 5) * (.55 + .45 * min(1.0, pct));
+    final roll = pct.abs();
+    final grip = min(1.0, roll * 5) * (.55 + .45 * min(1.0, roll));
     p.x += p.steer * steerSpeed * grip * dt;
     // Bends push the car gently outwards.
     p.x -= dt * 2 * pct * pct * seg.curve * centrifugal;
 
-    p.boosting = input.nitro && nitro > 0 && !input.brake;
-    p.braking = input.brake;
+    final rolling = p.speed > 0;
+    p.boosting = input.nitro && nitro > 0 && !input.brake && rolling;
+    p.braking = input.brake && rolling;
     final top = p.boosting ? maxSpeed * 1.3 : maxSpeed;
     if (input.brake) {
-      p.speed += braking * dt;
+      // Brake to a stop, then back up.
+      p.speed += (rolling ? braking : -accel) * dt;
     } else if (p.stun > 0) {
       p.speed += decel * dt;
+    } else if (input.gas || p.boosting) {
+      p.speed +=
+          (p.boosting ? accel * 1.8 : (rolling ? accel : accel * 3)) * dt;
+    } else if (p.speed.abs() < maxSpeed * .01) {
+      p.speed = 0;
     } else {
-      p.speed += (p.boosting ? accel * 1.8 : accel) * dt;
+      // Off the pedals the car rolls to a stop.
+      p.speed += (rolling ? decel : -decel) * .6 * dt;
     }
     if (p.boosting) {
       nitro = max(0, nitro - dt / 3.2);
@@ -403,33 +433,41 @@ class RaceGame {
       nitro = min(1, nitro + dt / 14);
     }
     if (p.speed > maxSpeed && !p.boosting) p.speed += decel * 1.5 * dt;
-    if (p.x.abs() > 1) {
-      if (p.speed > offRoadLimit) p.speed += offRoadDecel * dt;
-      // Things off the road stop you dead.
-      for (final prop in seg.props) {
-        if (!prop.solid) continue;
-        if ((p.x - prop.offset).abs() < prop.halfWidth + carHalfWidth) {
-          p.speed = maxSpeed / 6;
-          p.z = _wrap(segmentAt(p.z).index * segLen);
-          p.x += p.x > prop.offset ? .1 : -.1;
-          ev.crash = true;
-          break;
-        }
+    // Grass is slow, and a fence keeps the car on the verge so it can
+    // always steer straight back.
+    if (p.x.abs() > 1 && p.speed > offRoadLimit) {
+      p.speed += offRoadDecel * dt;
+    }
+    if (p.x.abs() > verge) {
+      p.x = p.x.sign * verge;
+      if (p.speed > offRoadLimit && _scrape <= 0) {
+        ev.bump = true;
+        _scrape = .5;
       }
     }
-    // Cones and barrels on the road knock speed off and spin you a little.
-    for (final prop in seg.props) {
-      if (!prop.onRoad) continue;
-      if ((p.x - prop.offset).abs() < prop.halfWidth + carHalfWidth &&
-          p.stun <= 0) {
-        p.speed *= prop.heavy ? .45 : .7;
-        p.stun = prop.heavy ? .7 : .35;
+    _scrape = max(0, _scrape - dt);
+    // Obstacles are knocked away once; coins and bottles are collected.
+    for (var k = 0; k < seg.props.length; k++) {
+      final prop = seg.props[k];
+      if (!prop.onRoad && !prop.pickup) continue;
+      if ((p.x - prop.offset).abs() > prop.halfWidth + carHalfWidth) continue;
+      if (!_taken.add(seg.index * 64 + k)) continue;
+      if (prop.kind == Prop.coin) {
+        coins++;
+        ev.coin = true;
+      } else if (prop.kind == Prop.nitro) {
+        nitro = min(1, nitro + .6);
+        ev.refill = true;
+      } else {
+        p.speed *= prop.heavy ? .5 : .75;
+        p.stun = prop.heavy ? .45 : .25;
         ev.crash = true;
       }
     }
-    p.x = p.x.clamp(-3, 3);
-    p.speed = p.speed.clamp(0, top);
+    p.speed = p.speed.clamp(-reverseLimit, top);
   }
+
+  double _scrape = 0;
 
   void _driveBot(Racer r, double dt) {
     final seg = segmentAt(r.z);
@@ -506,7 +544,7 @@ class RaceGame {
     }
     // Lean into bends against the centrifugal drift.
     want -= seg.curve * .04;
-    final i = RaceInput();
+    final i = RaceInput()..gas = true;
     if (p.x < want - .05) i.right = true;
     if (p.x > want + .05) i.left = true;
     i.nitro = seg.curve.abs() < 1 && nitro > .5;

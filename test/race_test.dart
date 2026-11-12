@@ -27,7 +27,7 @@ void main() {
 
   test('accelerates to top speed and the brake slows it', () {
     final g = game(0);
-    final input = RaceInput();
+    final input = RaceInput()..gas = true;
     for (var i = 0; i < 60 * 8; i++) {
       g.player.x = 0;
       g.update(1 / 60, input);
@@ -53,10 +53,13 @@ void main() {
   test('nitro goes past top speed and runs out', () {
     final g = game(0);
     g.player.speed = RaceGame.maxSpeed;
-    final input = RaceInput()..nitro = true;
+    final input = RaceInput()
+      ..gas = true
+      ..nitro = true;
     var fastest = 0.0;
     for (var i = 0; i < 60 * 4; i++) {
-      g.player.x = 0;
+      // Between two lanes, clear of obstacles and nitro bottles.
+      g.player.x = .31;
       g.update(1 / 60, input);
       fastest = max(fastest, g.player.speed);
     }
@@ -84,5 +87,68 @@ void main() {
         );
       }
     }
+  });
+
+  test('the car waits for the gas, and the brake backs it up', () {
+    final g = RaceGame(opponents: 0, random: Random(3))..started = true;
+    for (var i = 0; i < 60; i++) {
+      g.update(1 / 60, RaceInput());
+    }
+    expect(g.player.speed, 0);
+    final back = RaceInput()..brake = true;
+    for (var i = 0; i < 120; i++) {
+      g.update(1 / 60, back);
+    }
+    expect(g.player.speed, lessThan(0));
+    expect(g.player.speed, greaterThanOrEqualTo(-RaceGame.reverseLimit));
+    expect(g.player.lap, -1);
+  });
+
+  test('the verge holds the car and it can steer back on', () {
+    final g = RaceGame(opponents: 0, random: Random(3))..started = true;
+    final out = RaceInput()
+      ..gas = true
+      ..right = true;
+    for (var i = 0; i < 600; i++) {
+      g.update(1 / 60, out);
+    }
+    expect(g.player.x, lessThanOrEqualTo(RaceGame.verge));
+    expect(g.player.speed, greaterThan(0));
+    final home = RaceInput()
+      ..gas = true
+      ..left = true;
+    for (var i = 0; i < 90; i++) {
+      g.update(1 / 60, home);
+    }
+    expect(g.player.x, lessThan(1));
+  });
+
+  test('an obstacle is hit once and coins are collected', () {
+    final g = RaceGame(opponents: 0, random: Random(3))..started = true;
+    final seg = g.segments.firstWhere((s) => s.props.any((p) => p.onRoad));
+    final prop = seg.props.firstWhere((p) => p.onRoad);
+    final p = g.player
+      ..z = seg.index * RaceGame.segLen + 1
+      ..x = prop.offset
+      ..speed = 10;
+    var crashes = 0;
+    for (var i = 0; i < 200; i++) {
+      p
+        ..z = seg.index * RaceGame.segLen + 1
+        ..x = prop.offset;
+      if (g.update(1 / 60, RaceInput()).crash) crashes++;
+    }
+    expect(crashes, 1);
+
+    final coinSeg = g.segments.firstWhere(
+      (s) => s.props.any((p) => p.kind == Prop.coin),
+    );
+    final coin = coinSeg.props.firstWhere((p) => p.kind == Prop.coin);
+    p
+      ..stun = 0
+      ..z = coinSeg.index * RaceGame.segLen + 1
+      ..x = coin.offset;
+    g.update(1 / 60, RaceInput());
+    expect(g.coins, 1);
   });
 }

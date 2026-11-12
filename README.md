@@ -75,12 +75,15 @@ It is not full 3D: the cars and scenery are flat pictures on a projected road.
 - Race 2, 3 or 4 cars (you against 1–3 computer cars) over 1, 2, 3 or 5
   laps. The track has curves, hills, a start/finish arch, trees, bushes, flowers,
   rocks, fences, flags, signs and street lamps beside the road.
-- The car speeds up by itself. Hold ◀ / ▶ to steer, BRAKE to slow down
-  (the brake lights come on) and NITRO for a burst of speed; the nitro
-  bar refills slowly. Arrow keys, A/D, space and shift also work.
-- Cones, barrels, tyres, barriers and hay bales on the road slow you down; leaving the road slows
-  you, and hitting a tree, rock or fence out there nearly stops you. Cars bump
-  each other.
+- Hold GAS to go and ◀ / ▶ to steer. BRAKE slows the car (the brake
+  lights come on) and, once stopped, backs it up. NITRO gives a burst of
+  speed; the bar refills slowly, or at once from a nitro bottle. Top speed
+  is 200 km/h, more on nitro. Keys: arrows or WASD, space for nitro.
+- Coins on the road are counted in the HUD. Cones, barrels, tyres,
+  barriers and hay bales cost speed and are knocked away. Grass is slow,
+  and a fence along the verge keeps the car where it can steer back on.
+  Cars bump each other.
+- The pause button offers resume, restart and quit.
 - A 3-2-1 start light, live position, lap, time and speed, and a results
   card at the end.
 

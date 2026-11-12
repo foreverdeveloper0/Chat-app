@@ -45,16 +45,23 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
     expect(game.started, isTrue);
-    for (var i = 0; i < 20; i++) {
+    // The car waits for the gas.
+    final p = game.player;
+    expect(p.speed, 0);
+    final gas = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('gas'))),
+      pointer: 11,
+    );
+    for (var i = 0; i < 30; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
-    final p = game.player;
     expect(p.speed, greaterThan(0));
 
     // Hold right: the car moves right.
     final x0 = p.x;
     final right = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('right'))),
+      pointer: 12,
     );
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 50));
@@ -66,13 +73,26 @@ void main() {
     final v0 = p.speed;
     final brake = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('brake'))),
+      pointer: 13,
     );
-    for (var i = 0; i < 10; i++) {
+    for (var i = 0; i < 3; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
     expect(p.braking, isTrue);
     await brake.up();
     expect(p.speed, lessThan(v0));
+    await gas.up();
+
+    // Pause stops the clock.
+    await tester.tap(find.byKey(const ValueKey('pause')));
+    await tester.pump();
+    expect(find.text('PAUSED'), findsOneWidget);
+    final frozen = game.time;
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(game.time, frozen);
+    await tester.tap(find.text('RESUME'));
+    await tester.pump();
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox());

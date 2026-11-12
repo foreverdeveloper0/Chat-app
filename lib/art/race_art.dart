@@ -23,6 +23,8 @@ abstract final class RaceSprites {
     for (var i = 0; i < 4; i++) 'car$i',
     for (var i = 0; i < 4; i++) 'flag$i',
     for (var i = 0; i < 3; i++) 'barrel$i',
+    'coin',
+    'nitro',
     'fence0',
     'fence1',
     'rail',
@@ -76,6 +78,8 @@ abstract final class RaceSprites {
   Prop.tyres => ('tyres${p.variant % 2}', 3, 0),
   Prop.barrier => ('barrier${p.variant % 2}', 3.6, 0),
   Prop.hay => ('hay', 3.3, 0),
+  Prop.coin => ('coin', 2.3, 150),
+  Prop.nitro => ('nitro', 2.6, 150),
   Prop.arch => ('', 0, 0),
 };
 
@@ -183,9 +187,10 @@ class RaceScenePainter extends CustomPainter {
       canvas.save();
       canvas.clipRect(Rect.fromLTRB(0, 0, w, v.clip));
       final unit = v.p1.$4 * w / 2;
-      for (final prop in v.seg.props) {
+      for (final (k, prop) in v.seg.props.indexed) {
+        if (g.taken(v.seg, k)) continue;
         final sx = v.p1.$1 + unit * prop.offset * RaceGame.roadWidth;
-        _prop(canvas, w, prop, Offset(sx, v.p1.$2), unit, v.fog);
+        _prop(canvas, w, prop, Offset(sx, v.p1.$2), unit, v.fog, t);
       }
       for (final r in here ?? const <Racer>[]) {
         final pct = (r.z % RaceGame.segLen) / RaceGame.segLen;
@@ -493,6 +498,7 @@ class RaceScenePainter extends CustomPainter {
     Offset at,
     double unit,
     double fog,
+    double t,
   ) {
     // unit: screen pixels per world unit.
     double u(double world) => world * unit;
@@ -503,9 +509,13 @@ class RaceScenePainter extends CustomPainter {
     final (name, perPixel, lift) = _look(prop);
     final img = RaceSprites.of(name);
     if (img == null) return;
-    final width = u(img.width * perPixel);
-    if (width < 1.5) return;
-    final height = width * img.height / img.width;
+    final full = u(img.width * perPixel);
+    if (full < 1.5) return;
+    final height = full * img.height / img.width;
+    // Coins spin on the spot.
+    final width = prop.kind == Prop.coin
+        ? full * (.25 + .75 * math.cos(t * 5 + at.dy * .05).abs())
+        : full;
     final dst = Rect.fromLTWH(
       at.dx - width / 2,
       at.dy - height - u(lift),
@@ -522,7 +532,7 @@ class RaceScenePainter extends CustomPainter {
         Paint()..color = const Color(0x38000000),
       );
     }
-    if (lift > 0) {
+    if (prop.kind == Prop.sign) {
       canvas.drawRect(
         Rect.fromLTWH(at.dx - u(22), at.dy - u(lift) - 1, u(44), u(lift) + 1),
         Paint()..color = const Color(0xFF7D8494),

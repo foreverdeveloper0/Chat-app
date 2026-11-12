@@ -51,7 +51,7 @@ class _RaceScreenState extends State<RaceScreen>
   double _countdown = 3.5;
   int _lastCount = 4;
   double _sinceFinish = 0;
-  bool _results = false;
+  bool _results = false, _paused = false;
   String? _flash;
   double _flashT = 0;
 
@@ -75,6 +75,7 @@ class _RaceScreenState extends State<RaceScreen>
     _lastCount = 4;
     _sinceFinish = 0;
     _results = false;
+    _paused = false;
     _flash = null;
     _shake = 0;
     _camX = _game.player.x;
@@ -91,7 +92,7 @@ class _RaceScreenState extends State<RaceScreen>
   void _tick(Duration now) {
     final dt = math.min(1 / 20, (now - _last).inMicroseconds / 1e6);
     _last = now;
-    if (dt <= 0) return;
+    if (dt <= 0 || _paused) return;
     _clock += dt;
     _shake = math.max(0, _shake - dt * 2.5);
     _flashT = math.max(0, _flashT - dt);
@@ -130,6 +131,8 @@ class _RaceScreenState extends State<RaceScreen>
       Sounds.play(Sfx.hit);
       HapticFeedback.lightImpact();
     }
+    if (ev.coin) Sounds.play(Sfx.pocket);
+    if (ev.refill) Sounds.play(Sfx.bonus);
     if (ev.finished) {
       final pos = _game.positionOf(p);
       _flash = pos == 1 ? 'WINNER!' : 'FINISH  P$pos';
@@ -156,12 +159,13 @@ class _RaceScreenState extends State<RaceScreen>
         k == LogicalKeyboardKey.keyD) {
       _input.right = down;
     } else if (k == LogicalKeyboardKey.arrowDown ||
-        k == LogicalKeyboardKey.keyS ||
-        k == LogicalKeyboardKey.space) {
+        k == LogicalKeyboardKey.keyS) {
       _input.brake = down;
     } else if (k == LogicalKeyboardKey.arrowUp ||
-        k == LogicalKeyboardKey.shiftLeft ||
         k == LogicalKeyboardKey.keyW) {
+      _input.gas = down;
+    } else if (k == LogicalKeyboardKey.space ||
+        k == LogicalKeyboardKey.shiftLeft) {
       _input.nitro = down;
     } else {
       return KeyEventResult.ignored;
@@ -199,6 +203,7 @@ class _RaceScreenState extends State<RaceScreen>
               ),
             ),
             SafeArea(child: _controls()),
+            if (_paused && !_results) _pauseCard(),
             if (_results)
               ResultOverlay(
                 order: [for (final r in standings) r.id],
@@ -218,7 +223,7 @@ class _RaceScreenState extends State<RaceScreen>
     final g = _game, p = g.player;
     final pos = g.positionOf(p);
     final lap = (p.lap + 1).clamp(1, widget.laps);
-    final kmh = (p.speed / RaceGame.maxSpeed * 240).round();
+    final kmh = (p.speed.abs() / RaceGame.maxSpeed * 200).round();
     final t = g.time;
     String clock(double s) =>
         '${(s ~/ 60)}:${(s % 60).floor().toString().padLeft(2, '0')}.${((s * 10) % 10).floor()}';
@@ -353,6 +358,19 @@ class _RaceScreenState extends State<RaceScreen>
         // Speed and nitro, centre bottom above the pedals.
         Positioned(
           right: 10,
+          top: 74,
+          child: GestureDetector(
+            key: const ValueKey('pause'),
+            onTap: _togglePause,
+            child: Image.asset(
+              'assets/images/race/btn_pause.png',
+              width: 46,
+              height: 46,
+            ),
+          ),
+        ),
+        Positioned(
+          right: 62,
           top: 76,
           child: Align(
             alignment: Alignment.topRight,
@@ -361,6 +379,28 @@ class _RaceScreenState extends State<RaceScreen>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  Image.asset('assets/images/race/coin.png', width: 20),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${g.coins}',
+                    key: const ValueKey('coins'),
+                    style: _big.copyWith(
+                      fontSize: 20,
+                      color: const Color(0xFFFFE28A),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  if (p.reversing)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4, bottom: 3),
+                      child: Text(
+                        'R',
+                        style: _big.copyWith(
+                          fontSize: 18,
+                          color: const Color(0xFFFF6B6B),
+                        ),
+                      ),
+                    ),
                   Text(
                     '$kmh',
                     key: const ValueKey('speed'),
@@ -376,7 +416,7 @@ class _RaceScreenState extends State<RaceScreen>
                     padding: const EdgeInsets.only(bottom: 5),
                     child: Text('km/h', style: _small),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -384,7 +424,7 @@ class _RaceScreenState extends State<RaceScreen>
                       Text('NITRO', style: _small.copyWith(fontSize: 10)),
                       const SizedBox(height: 3),
                       Container(
-                        width: 90,
+                        width: 62,
                         height: 10,
                         decoration: BoxDecoration(
                           color: const Color(0x55000000),
@@ -493,21 +533,118 @@ class _RaceScreenState extends State<RaceScreen>
     return Align(
       alignment: Alignment.bottomCenter,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 0, 14, 26),
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 26),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            _Pedal('left', 78, (v) => _input.left = v),
-            const SizedBox(width: 10),
-            _Pedal('right', 78, (v) => _input.right = v),
-            const Spacer(),
-            _Pedal('nitro', 68, (v) => _input.nitro = v, 'NITRO'),
+            _Pedal('left', 80, (v) => _input.left = v),
             const SizedBox(width: 8),
-            _Pedal('brake', 84, (v) => _input.brake = v, 'BRAKE'),
+            _Pedal('right', 80, (v) => _input.right = v),
+            const Spacer(),
+            // Brake and gas side by side, nitro above the gas.
+            SizedBox(
+              width: 164,
+              height: 168,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    left: 0,
+                    bottom: 0,
+                    child: _Pedal(
+                      'brake',
+                      72,
+                      (v) => _input.brake = v,
+                      'BRAKE',
+                    ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: _Pedal('gas', 86, (v) => _input.gas = v, 'GAS'),
+                  ),
+                  Positioned(
+                    right: 12,
+                    top: 0,
+                    child: _Pedal(
+                      'nitro',
+                      60,
+                      (v) => _input.nitro = v,
+                      'NITRO',
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _pauseCard() => Positioned.fill(
+    child: ColoredBox(
+      color: const Color(0xAA050818),
+      child: Center(
+        child: _panel(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('PAUSED', style: _big.copyWith(fontSize: 28)),
+                const SizedBox(height: 14),
+                for (final (label, colour, action) in [
+                  ('RESUME', const Color(0xFF1FA35C), _togglePause),
+                  (
+                    'RESTART',
+                    const Color(0xFF2E6BE0),
+                    () => setState(_newRace),
+                  ),
+                  (
+                    'QUIT',
+                    const Color(0xFFC0392B),
+                    () => Navigator.of(context).pop(),
+                  ),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: GestureDetector(
+                      onTap: action,
+                      child: Container(
+                        width: 180,
+                        height: 44,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: colour,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: AppColors.goldSoft,
+                            width: 1.6,
+                          ),
+                        ),
+                        child: Text(label, style: _big.copyWith(fontSize: 17)),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  void _togglePause() {
+    if (_game.over) return;
+    // Let go of every pedal so nothing stays held through the pause.
+    _input
+      ..left = false
+      ..right = false
+      ..gas = false
+      ..brake = false
+      ..nitro = false;
+    setState(() => _paused = !_paused);
   }
 
   Widget _panel(Widget child) => Container(
