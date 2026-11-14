@@ -11,6 +11,11 @@ import '../theme/app_colors.dart';
 import '../widgets/game_hud.dart';
 
 /// Play chips for the card table. They last while the app is open.
+/// How much may be brought to a table with small blind [sb]: from 20 to
+/// 200 big blinds, 100 being the usual stack.
+({int min, int usual, int max}) buyInRange(int sb) =>
+    (min: sb * 40, usual: sb * 200, max: sb * 400);
+
 abstract final class PokerWallet {
   static int chips = 50000;
   static const freeChips = 10000;
@@ -105,7 +110,8 @@ class _PokerScreenState extends State<PokerScreen>
     PokerWallet.chips -= widget.buyIn;
     _game = Holdem(
       smallBlind: widget.smallBlind,
-      buyIn: widget.buyIn,
+      buyIn: buyInRange(widget.smallBlind).usual,
+      yourChips: widget.buyIn,
       players: widget.players,
     );
     PokerScreen.debugGame = _game;
@@ -243,25 +249,41 @@ class _PokerScreenState extends State<PokerScreen>
     _later(350, _advance);
   }
 
+  /// Busted: buy in again from the account, or take free chips when the
+  /// account cannot cover the table's minimum.
   Future<void> _outOfChips() async {
+    final range = buyInRange(widget.smallBlind);
+    final bank = PokerWallet.chips;
+    final canRebuy = bank >= range.min;
+    final amount = canRebuy
+        ? math.min(range.usual, bank)
+        : PokerWallet.freeChips;
     final stay = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (d) => _Dialog(
         title: 'Out of chips',
-        body:
-            'You need at least ${formatCoins(_game.bigBlind)} for the big '
-            'blind. Take ${formatCoins(PokerWallet.freeChips)} free chips '
-            'and keep playing?',
+        body: canRebuy
+            ? 'Bring ${formatCoins(amount)} more from your account '
+                  '(${formatCoins(bank)}) and keep playing?'
+            : 'Your account is empty too. Take '
+                  '${formatCoins(amount)} free chips and keep playing?',
         actions: [
           ('LEAVE', const Color(0xFF2A3A9A), () => Navigator.pop(d, false)),
-          ('FREE CHIPS', const Color(0xFF1FA35C), () => Navigator.pop(d, true)),
+          (
+            canRebuy ? 'BUY IN' : 'FREE CHIPS',
+            const Color(0xFF1FA35C),
+            () => Navigator.pop(d, true),
+          ),
         ],
       ),
     );
     if (!mounted) return;
     if (stay ?? false) {
-      setState(() => _game.you.chips += PokerWallet.freeChips);
+      setState(() {
+        if (canRebuy) PokerWallet.chips -= amount;
+        _game.you.chips += amount;
+      });
       _later(400, _deal);
     } else {
       Navigator.of(context).pop();
@@ -417,6 +439,25 @@ class _PokerScreenState extends State<PokerScreen>
                 formatCoins(g.you.chips),
                 key: const ValueKey('my-chips'),
                 style: _text(13),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 6),
+        _pill(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.account_balance_wallet_rounded,
+                size: 15,
+                color: Color(0xFFFFE28A),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                formatCoins(PokerWallet.chips),
+                key: const ValueKey('bank'),
+                style: _text(12, const Color(0xFFFFE28A)),
               ),
             ],
           ),
@@ -975,7 +1016,7 @@ class _PokerScreenState extends State<PokerScreen>
       children: [
         // Status, top centre-left, clear of the buttons.
         Positioned(
-          left: 215,
+          left: 290,
           top: 14,
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 150),

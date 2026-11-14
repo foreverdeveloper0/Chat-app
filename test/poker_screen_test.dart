@@ -33,6 +33,32 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text("TEXAS HOLD'EM"), findsOneWidget);
     expect(find.text('Starter Table'), findsOneWidget);
+
+    // Joining asks how much to bring; the rest stays in the account.
+    await tester.tap(find.text('Starter Table'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('JOIN TABLE'), findsOneWidget);
+    String shown(String key) =>
+        tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+    expect(shown('buyin-amount'), '2K'); // 100 big blinds by default
+    expect(shown('buyin-bank'), '50K');
+    expect(shown('buyin-left'), '48K');
+    await tester.tap(find.byKey(const ValueKey('buyin-MIN')));
+    await tester.pump();
+    expect(shown('buyin-amount'), '400');
+    expect(shown('buyin-left'), '49.6K');
+    await tester.tap(find.byKey(const ValueKey('buyin-MAX')));
+    await tester.pump();
+    expect(shown('buyin-amount'), '4K');
+    expect(shown('buyin-left'), '46K');
+    // Nothing leaves the account until you join.
+    expect(PokerWallet.chips, 50000);
+    await tester.tap(find.text('CANCEL'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('JOIN TABLE'), findsNothing);
+    expect(PokerWallet.chips, 50000);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 1));
@@ -73,6 +99,7 @@ void main() {
     final game = PokerScreen.debugGame!;
     expect(game.seats.length, 5);
     expect(PokerWallet.chips, 48000);
+    expect(find.byKey(const ValueKey('bank')), findsOneWidget);
 
     Future<void> untilMyTurn() async {
       for (var i = 0; i < 900; i++) {

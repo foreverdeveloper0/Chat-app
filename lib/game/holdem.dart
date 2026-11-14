@@ -165,19 +165,23 @@ class Holdem {
   Holdem({
     required this.smallBlind,
     required this.buyIn,
+    int? yourChips,
     int players = 5,
     String you = 'You',
     Random? random,
   }) : rng = random ?? Random() {
     const names = ['Riya', 'Arjun', 'Meera', 'Kabir'];
     const nerves = [.35, .7, .5, .85];
-    seats.add(Seat(0, you, buyIn, bot: false));
+    seats.add(Seat(0, you, yourChips ?? buyIn, bot: false));
     for (var i = 1; i < players.clamp(2, 5); i++) {
       seats.add(Seat(i, names[i - 1], buyIn, nerve: nerves[i - 1]));
     }
   }
 
   final Random rng;
+
+  /// [buyIn] is the stack each computer player sits down (and re-buys)
+  /// with.
   final int smallBlind, buyIn;
   int get bigBlind => smallBlind * 2;
   final seats = <Seat>[];

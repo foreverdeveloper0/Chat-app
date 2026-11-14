@@ -118,10 +118,14 @@ players, with play chips only. The table is the supplied picture, laid
 out sideways, so the phone turns to landscape while the table is open
 and back to upright when you leave.
 
-- Pick a table (blinds 10/20 up to 1K/2K) and how many sit at it. You
-  bring the table's buy-in from your chips and take what is left back
-  when you leave. Chips last while the app is open; free chips are
-  offered when you run out.
+- Pick a table (blinds 10/20 up to 1K/2K) and how many sit at it. A
+  buy-in screen then asks how many chips to bring, from 20 to 200 big
+  blinds (100 by default), with a slider and MIN / 100 BB / MAX; it shows
+  what stays in your account. You play with exactly what you brought.
+- Your account and your table chips are both shown at the table. Leaving
+  returns the table chips to the account. If you bust you can buy in
+  again from the account, or take free chips when it is empty. Chips last
+  while the app is open.
 - The dealer button moves round each hand; the two seats after it post
   the small and big blind. Everyone gets two cards, then betting rounds
   before the flop, on the flop (three cards), the turn and the river.

@@ -216,4 +216,21 @@ void main() {
       }
     }
   });
+
+  test('you sit down with what you chose; the others with the usual stack', () {
+    final g = Holdem(
+      smallBlind: 10,
+      buyIn: 2000,
+      yourChips: 650,
+      players: 4,
+      random: Random(1),
+    );
+    expect(g.you.chips, 650);
+    expect(g.seats.skip(1).every((s) => s.chips == 2000), isTrue);
+    // Only computer players are topped up.
+    g.you.chips = 0;
+    g.seats[1].chips = 0;
+    expect(g.rebuyBots(), [g.seats[1]]);
+    expect(g.you.chips, 0);
+  });
 }
