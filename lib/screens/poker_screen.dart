@@ -1297,7 +1297,13 @@ class _PokerScreenState extends State<PokerScreen>
           me
               ? at + Offset(radius + 104 * _k, radius * .1)
               : at + Offset(0, radius * .56),
-          badge,
+          // Never wider than the picture it sits on.
+          me
+              ? badge
+              : SizedBox(
+                  width: radius * 1.8,
+                  child: FittedBox(fit: BoxFit.scaleDown, child: badge),
+                ),
           width: 240,
         ),
     ];
@@ -1338,9 +1344,9 @@ class _PokerScreenState extends State<PokerScreen>
         top = 'Check';
         fill = const Color(0xFF0E3A2A);
       } else if (a.startsWith('SB')) {
-        (top, bottom) = ('Small Blind', amount);
+        (top, bottom) = (s.index == 0 ? 'Small Blind' : 'SB', amount);
       } else {
-        (top, bottom) = ('Big Blind', amount);
+        (top, bottom) = (s.index == 0 ? 'Big Blind' : 'BB', amount);
       }
     }
     return TweenAnimationBuilder<double>(
