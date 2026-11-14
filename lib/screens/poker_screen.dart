@@ -278,7 +278,7 @@ class _PokerScreenState extends State<PokerScreen>
       ? 1
       : -1;
 
-  Offset get _potAt => _at(903, 345);
+  Offset get _potAt => _at(903, 318);
   Offset get _dealerAt => _at(903, 250);
 
   void _fly(int seat, {required bool toPot}) {
@@ -361,7 +361,7 @@ class _PokerScreenState extends State<PokerScreen>
                       child: child!,
                     );
                   },
-                  child: const _Chip(size: 18),
+                  child: const _Chip(size: 22),
                 ),
               if (g.result != null) _resultBanner(g.result!),
               _topBar(g),
@@ -426,27 +426,64 @@ class _PokerScreenState extends State<PokerScreen>
     ),
   );
 
+  /// The pot: stacks of chips over a gold-rimmed plate with the amount.
   Widget _potLabel(Holdem g) => _place(
-    _potAt,
-    Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-      decoration: BoxDecoration(
-        color: const Color(0xBB06240F),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.goldTrim, width: 1.1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const _Chip(size: 14),
-          const SizedBox(width: 6),
-          Text(
-            'POT  ${formatCoins(g.pot)}',
-            key: const ValueKey('pot'),
-            style: _text(13, const Color(0xFFFFE28A)),
+    _potAt + Offset(0, -6 * _k),
+    Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (g.pot > 0)
+          _ChipStack(amount: g.pot, bigBlind: g.bigBlind, size: 28, columns: 4),
+        Transform.translate(
+          offset: const Offset(0, -3),
+          child: Container(
+            padding: const EdgeInsets.all(1.6),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFFFFF1B8),
+                  Color(0xFFE3B341),
+                  Color(0xFF9A6A00),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [
+                BoxShadow(color: Color(0x99000000), blurRadius: 6),
+              ],
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF0B3A1C), Color(0xFF041C0C)],
+                ),
+                borderRadius: BorderRadius.circular(12.5),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    'POT',
+                    style: _text(9.5, const Color(0xFFB8E6C4), FontWeight.w600),
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    formatCoins(g.pot),
+                    key: const ValueKey('pot'),
+                    style: _text(15, const Color(0xFFFFE28A)),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ],
-      ),
+        ),
+      ],
     ),
   );
 
@@ -643,7 +680,7 @@ class _PokerScreenState extends State<PokerScreen>
             border: Border.all(color: const Color(0xFFFFE28A), width: 1.6),
           ),
           child: badge.isEmpty
-              ? _Chip(size: 32 * _k)
+              ? _Chip(size: 40 * _k, colour: const Color(0xFFD4A017))
               : Text(
                   badge,
                   style: _text(
@@ -687,20 +724,25 @@ class _PokerScreenState extends State<PokerScreen>
       if (s.bet > 0 && g.playing)
         _place(
           betAt,
-          Container(
-            padding: const EdgeInsets.fromLTRB(3, 2, 8, 2),
-            decoration: BoxDecoration(
-              color: const Color(0xAA06240F),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const _Chip(size: 14),
-                const SizedBox(width: 4),
-                Text(formatCoins(s.bet), style: _text(11)),
-              ],
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _ChipStack(amount: s.bet, bigBlind: g.bigBlind, size: 22),
+              const SizedBox(width: 3),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xCC041C0C),
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: const Color(0xAAE3B341), width: .8),
+                ),
+                child: Text(
+                  formatCoins(s.bet),
+                  style: _text(11, const Color(0xFFFFE28A)),
+                ),
+              ),
+            ],
           ),
           width: 120,
         ),
@@ -734,7 +776,7 @@ class _PokerScreenState extends State<PokerScreen>
     final you = g.you;
     if (!you.inHand || you.hole.isEmpty) return const [];
     final cw = 134 * _k;
-    final at = _spot(0) + Offset(0, 56 * _k);
+    final at = _spot(0) + Offset(0, 34 * _k);
     final made = g.board.length >= 3 && !you.folded
         ? evaluate([...you.hole, ...g.board]).rank.label
         : null;
@@ -1160,39 +1202,158 @@ class _FlyingChip {
 
 /// A gold casino chip.
 class _Chip extends StatelessWidget {
-  const _Chip({required this.size});
+  const _Chip({required this.size, this.colour = const Color(0xFFD81E3A)});
+  final double size;
+  final Color colour;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: size,
+    height: size,
+    child: CustomPaint(painter: _ChipPainter(colour)),
+  );
+}
+
+/// A casino chip seen from above: a coloured disc with white edge inlays,
+/// a fine ring and a bright centre.
+class _ChipPainter extends CustomPainter {
+  const _ChipPainter(this.colour);
+  final Color colour;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero), r = size.width / 2;
+    canvas.drawCircle(
+      c + Offset(0, r * .14),
+      r,
+      Paint()..color = const Color(0x77000000),
+    );
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-.3, -.4),
+          colors: [
+            Color.lerp(colour, Colors.white, .35)!,
+            colour,
+            Color.lerp(colour, Colors.black, .45)!,
+          ],
+          stops: const [0, .6, 1],
+        ).createShader(Rect.fromCircle(center: c, radius: r)),
+    );
+    // Six white inlays round the edge.
+    final inlay = Paint()
+      ..color = const Color(0xFFFDFBF4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = r * .3;
+    for (var i = 0; i < 6; i++) {
+      canvas.drawArc(
+        Rect.fromCircle(center: c, radius: r * .84),
+        i * math.pi / 3 - .2,
+        .4,
+        false,
+        inlay,
+      );
+    }
+    canvas.drawCircle(
+      c,
+      r * .64,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * .07
+        ..color = const Color(0xFFFFE28A),
+    );
+    canvas.drawCircle(
+      c,
+      r * .56,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            Color.lerp(colour, Colors.white, .5)!,
+            Color.lerp(colour, Colors.black, .15)!,
+          ],
+        ).createShader(Rect.fromCircle(center: c, radius: r * .56)),
+    );
+    // A star in the middle.
+    final star = Path();
+    for (var i = 0; i < 10; i++) {
+      final a = -math.pi / 2 + i * math.pi / 5;
+      final d = r * (i.isEven ? .36 : .15);
+      final p = c + Offset(math.cos(a), math.sin(a)) * d;
+      i == 0 ? star.moveTo(p.dx, p.dy) : star.lineTo(p.dx, p.dy);
+    }
+    canvas.drawPath(star..close(), Paint()..color = const Color(0xFFFFF1B8));
+  }
+
+  @override
+  bool shouldRepaint(_ChipPainter old) => old.colour != colour;
+}
+
+/// Chip colours by value, dearest first, in big blinds.
+const _denominations = [
+  (100.0, Color(0xFF1B1B26)), // black
+  (25.0, Color(0xFF7B2FD0)), // purple
+  (5.0, Color(0xFF1FA35C)), // green
+  (1.0, Color(0xFFD81E3A)), // red
+  (0.0, Color(0xFF2E6BE0)), // blue, for the small change
+];
+
+/// An amount as neat stacks of chips, side by side.
+class _ChipStack extends StatelessWidget {
+  const _ChipStack({
+    required this.amount,
+    required this.bigBlind,
+    this.size = 18,
+    this.columns = 3,
+  });
+  final int amount, bigBlind, columns;
   final double size;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      gradient: const RadialGradient(
-        center: Alignment(-.3, -.4),
-        colors: [Color(0xFFFFF1B8), Color(0xFFE3B341), Color(0xFF9A6A00)],
-      ),
-      border: Border.all(color: const Color(0xFFFFF7D6), width: size * .09),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x88000000),
-          blurRadius: 3,
-          offset: Offset(0, 2),
-        ),
+  Widget build(BuildContext context) {
+    // Break the amount into chips, a few stacks of at most six.
+    final stacks = <(Color, int)>[];
+    var left = amount / bigBlind;
+    for (final (value, colour) in _denominations) {
+      if (stacks.length >= columns) break;
+      final n = value == 0 ? (left > 0 ? 1 : 0) : (left / value).floor();
+      if (n <= 0) continue;
+      stacks.add((colour, math.min(6, n)));
+      left -= n * value;
+    }
+    if (stacks.isEmpty) stacks.add((_denominations[3].$2, 1));
+    final lift = size * .2;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (final (colour, n) in stacks)
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: size * .04),
+            child: SizedBox(
+              width: size,
+              height: size * .62 + lift * (n - 1) + size * .2,
+              child: Stack(
+                children: [
+                  for (var i = 0; i < n; i++)
+                    Positioned(
+                      left: 0,
+                      bottom: i * lift,
+                      // Seen at a slant, like chips on a table.
+                      child: Transform(
+                        transform: Matrix4.diagonal3Values(1, .62, 1),
+                        alignment: Alignment.bottomCenter,
+                        child: _Chip(size: size, colour: colour),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
       ],
-    ),
-    child: Center(
-      child: Container(
-        width: size * .45,
-        height: size * .45,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: const Color(0xFF9A6A00), width: 1),
-        ),
-      ),
-    ),
-  );
+    );
+  }
 }
 
 /// A playing card, face up or showing its back, flipping between the two.
@@ -1308,9 +1469,11 @@ class _CardPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    tp.paint(canvas, Offset(w * .1, h * .06));
-    _suit(canvas, c.suit, Offset(w * .26, h * .48), w * .2, ink);
-    _suit(canvas, c.suit, Offset(w * .62, h * .68), w * .5, ink);
+    // Rank and suit side by side at the top, so both read even when only
+    // the top of the card shows; a large suit fills the rest.
+    tp.paint(canvas, Offset(w * .09, h * .035));
+    _suit(canvas, c.suit, Offset(w * .73, h * .17), w * .36, ink);
+    _suit(canvas, c.suit, Offset(w * .5, h * .66), w * .58, ink);
   }
 
   /// A suit symbol centred on [at], [s] wide.
@@ -1319,10 +1482,13 @@ class _CardPainter extends CustomPainter {
     final r = s / 2;
     canvas.save();
     canvas.translate(at.dx, at.dy);
+    // Two round lobes meeting in a notch, drawn down to a point.
     Path heart() => Path()
-      ..moveTo(0, r * .9)
-      ..cubicTo(-r * 1.6, -r * .2, -r * .7, -r * 1.3, 0, -r * .45)
-      ..cubicTo(r * .7, -r * 1.3, r * 1.6, -r * .2, 0, r * .9)
+      ..moveTo(0, r)
+      ..cubicTo(-r * .35, r * .55, -r, r * .15, -r, -r * .4)
+      ..arcToPoint(Offset(0, -r * .4), radius: Radius.circular(r * .5))
+      ..arcToPoint(Offset(r, -r * .4), radius: Radius.circular(r * .5))
+      ..cubicTo(r, r * .15, r * .35, r * .55, 0, r)
       ..close();
     void stem() => canvas.drawPath(
       Path()
