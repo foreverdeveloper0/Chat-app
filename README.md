@@ -118,7 +118,9 @@ players, with play chips only. The table is the supplied picture, laid
 out sideways, so the phone turns to landscape while the table is open
 and back to upright when you leave.
 
-- Pick a table (blinds 10/20 up to 1K/2K) and how many sit at it. A
+- Pick a table, from blinds 10/20 up to the 500 Crore table (blinds 2.5
+  Crore / 5 Crore), and how many sit at it. The account starts with 10
+  lakh crore play chips. A
   buy-in screen then asks how many chips to bring, from 20 to 200 big
   blinds (100 by default), with a slider and MIN / 100 BB / MAX; it shows
   what stays in your account. You play with exactly what you brought.
@@ -137,7 +139,12 @@ and back to upright when you leave.
   or CALL and RAISE on the right. RAISE opens a panel with a slider and
   quick amounts (minimum, half pot, pot, all in). A ring round the seat
   counts down 20 seconds; if yours runs out you check, or fold to a bet.
-- Chips are shown as stacks coloured by value, for the pot and each bet.
+- Chips are shown as stacks coloured by value. Each bet sits beside a
+  plaque naming the move (blind, call, bet, raise, all in) in its colour.
+- Every move has its own sound slot (deal, card, check, call, raise, all
+  in, fold, your turn, last-seconds tick, win, lose, chips). Until a
+  recording named `assets/sounds/poker<Name>.wav` is added, each borrows
+  an existing sound; see `_standIns` in `lib/game/sounds.dart`.
 - The best five cards from your two and the five on the table win:
   straight flush, four of a kind, full house, flush, straight, three of
   a kind, two pair, pair, high card. Ties split the pot, and a player

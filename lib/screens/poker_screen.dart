@@ -17,7 +17,8 @@ import '../widgets/game_hud.dart';
     (min: sb * 40, usual: sb * 200, max: sb * 400);
 
 abstract final class PokerWallet {
-  static int chips = 50000;
+  /// 10 lakh crore to start with.
+  static int chips = 10000000000000;
   static const freeChips = 10000;
 }
 
@@ -83,6 +84,9 @@ class _PokerScreenState extends State<PokerScreen>
   /// The street bet your RAISE button would make.
   int _raiseTo = 0;
 
+  /// The last second of your turn that ticked.
+  int _lastTick = 0;
+
   /// The raise panel is open.
   bool _raising = false;
 
@@ -90,6 +94,15 @@ class _PokerScreenState extends State<PokerScreen>
   /// a fold.
   late final AnimationController _clock =
       AnimationController(vsync: this, duration: const Duration(seconds: 20))
+        // Your last five seconds tick.
+        ..addListener(() {
+          final left = ((1 - _clock.value) * 20).ceil();
+          if (_myTurn && left <= 5 && left > 0 && left != _lastTick) {
+            _lastTick = left;
+            Sounds.play(Sfx.pokerTick);
+            HapticFeedback.lightImpact();
+          }
+        })
         ..addStatusListener((status) {
           if (status == AnimationStatus.completed && _myTurn) {
             _act(
@@ -160,7 +173,7 @@ class _PokerScreenState extends State<PokerScreen>
       g.deal();
       _dealing = true;
     });
-    Sounds.play(Sfx.diceRoll);
+    Sounds.play(Sfx.pokerDeal);
     _fly(g.smallBlindSeat, toPot: true);
     _fly(g.bigBlindSeat, toPot: true);
     _later(1200, () {
@@ -182,12 +195,13 @@ class _PokerScreenState extends State<PokerScreen>
       _clock.stop();
       _later(650, () {
         setState(g.nextStreet);
-        if (g.playing) Sounds.play(Sfx.diceLand);
+        if (g.playing) Sounds.play(Sfx.pokerCard);
         _later(450, _advance);
       });
       return;
     }
     final s = g.current;
+    _lastTick = 0;
     _clock.forward(from: 0);
     if (!s.bot) {
       // The buttons may already be up and the raise panel open: leave
@@ -196,10 +210,12 @@ class _PokerScreenState extends State<PokerScreen>
         setState(() => _raiseTo = g.raiseRange(s)?.min ?? 0);
       }
       HapticFeedback.selectionClick();
-      Sounds.play(Sfx.turn);
+      Sounds.play(Sfx.pokerTurn);
       return;
     }
     _later(800 + math.Random().nextInt(700), () {
+      // Only ever play the seat this turn was for.
+      if (!g.playing || g.awaitingStreet || g.current != s) return;
       final before = s.total;
       g.botTurn();
       setState(() {});
@@ -210,12 +226,20 @@ class _PokerScreenState extends State<PokerScreen>
 
   /// Sound and chips for a move.
   void _react(Seat s, int paid) {
-    if (paid > 0) {
-      _fly(s.index, toPot: true);
-      Sounds.play(Sfx.pocket);
-    } else {
-      Sounds.play(Sfx.tap);
-    }
+    if (paid > 0) _fly(s.index, toPot: true);
+    // Each move has its own sound.
+    final a = s.lastAction;
+    Sounds.play(
+      a.startsWith('Fold')
+          ? Sfx.pokerFold
+          : a.startsWith('Check')
+          ? Sfx.pokerCheck
+          : a.startsWith('All in')
+          ? Sfx.pokerAllIn
+          : a.startsWith('Call')
+          ? Sfx.pokerCall
+          : Sfx.pokerRaise,
+    );
   }
 
   void _finish() {
@@ -228,7 +252,8 @@ class _PokerScreenState extends State<PokerScreen>
           _later(i * 70, () => _fly(w.index, toPot: false));
         }
       }
-      Sounds.play(won ? Sfx.win : Sfx.rank);
+      Sounds.play(won ? Sfx.pokerWin : Sfx.pokerLose);
+      _later(350, () => Sounds.play(Sfx.pokerChips));
       if (won) HapticFeedback.heavyImpact();
     });
     _later(r.revealed.isEmpty ? 2600 : 4600, _deal);
@@ -242,6 +267,12 @@ class _PokerScreenState extends State<PokerScreen>
   void _act(void Function(Seat you) move) {
     if (!_myTurn) return;
     final you = _game.you, before = you.total;
+    // The buttons are up a moment before the turn is announced. Drop
+    // anything still queued for it, so the hand moves on exactly once.
+    for (final t in _timers) {
+      t.cancel();
+    }
+    _timers.clear();
     move(you);
     _clock.stop();
     setState(() => _raising = false);
@@ -655,6 +686,80 @@ class _PokerScreenState extends State<PokerScreen>
     ];
   }
 
+  /// What a player has put in on this street: a stack of chips beside a
+  /// plaque naming the move (blind, call, bet, raise, all in) and the
+  /// amount. It pops in each time the amount changes.
+  Widget _betPlaque(Seat s, Holdem g) {
+    final a = s.lastAction;
+    final (label, colour) = a.startsWith('All in')
+        ? ('ALL IN', const Color(0xFFFF4D5E))
+        : a.startsWith('Raise')
+        ? ('RAISE', const Color(0xFFFFB020))
+        : a.startsWith('Bet')
+        ? ('BET', const Color(0xFFFFB020))
+        : a.startsWith('Call')
+        ? ('CALL', const Color(0xFF3FE08A))
+        : a.startsWith('SB')
+        ? ('SMALL BLIND', const Color(0xFF6FB1FF))
+        : a.startsWith('BB')
+        ? ('BIG BLIND', const Color(0xFF6FB1FF))
+        : ('BET', const Color(0xFFFFE28A));
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('bet-${s.index}-${s.bet}'),
+      tween: Tween(begin: .5, end: 1),
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutBack,
+      builder: (context, t, child) => Transform.scale(scale: t, child: child),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _ChipStack(amount: s.bet, bigBlind: g.bigBlind, size: 22),
+          const SizedBox(width: 4),
+          Container(
+            padding: const EdgeInsets.all(1.3),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color.lerp(colour, Colors.white, .5)!,
+                  colour,
+                  Color.lerp(colour, Colors.black, .45)!,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(color: colour.withValues(alpha: .45), blurRadius: 7),
+              ],
+            ),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(8, 1, 8, 2),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF14241A), Color(0xFF050B07)],
+                ),
+                borderRadius: BorderRadius.circular(8.8),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: _text(7.5, colour).copyWith(letterSpacing: .8),
+                  ),
+                  Text(formatCoins(s.bet), style: _text(13.5)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Marks a folded player: the word across the middle of the greyed
   /// profile, on a dark band.
   Widget _foldMark(double radius) => TweenAnimationBuilder<double>(
@@ -712,7 +817,7 @@ class _PokerScreenState extends State<PokerScreen>
         : '';
     final betAt = s.index == 0
         ? at + Offset(-200 * _k, -38 * _k)
-        : at + Offset(inward * 215 * _k, 70 * _k);
+        : at + Offset(inward * 240 * _k, 70 * _k);
     final won = r?.winnings[s];
     return [
       _place(
@@ -788,7 +893,11 @@ class _PokerScreenState extends State<PokerScreen>
         ),
       // What they last did.
       // (A folded player's profile already says so.)
-      if (s.lastAction.isNotEmpty && s.inHand && !s.folded && won == null)
+      if (s.lastAction.isNotEmpty &&
+          s.inHand &&
+          !s.folded &&
+          won == null &&
+          !(s.bet > 0 && g.playing))
         _place(
           at +
               (s.index == 0
@@ -822,32 +931,8 @@ class _PokerScreenState extends State<PokerScreen>
           ),
           width: 140,
         ),
-      // Chips bet on this street.
-      if (s.bet > 0 && g.playing)
-        _place(
-          betAt,
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _ChipStack(amount: s.bet, bigBlind: g.bigBlind, size: 22),
-              const SizedBox(width: 3),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-                decoration: BoxDecoration(
-                  color: const Color(0xCC041C0C),
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(color: const Color(0xAAE3B341), width: .8),
-                ),
-                child: Text(
-                  formatCoins(s.bet),
-                  style: _text(11, const Color(0xFFFFE28A)),
-                ),
-              ),
-            ],
-          ),
-          width: 120,
-        ),
+      // Chips bet on this street, on a plaque coloured by the move.
+      if (s.bet > 0 && g.playing) _place(betAt, _betPlaque(s, g), width: 170),
       if (reveal && s.bot)
         _place(
           at + Offset(inward * 215 * _k, 62 * _k),
@@ -1065,14 +1150,17 @@ class _PokerScreenState extends State<PokerScreen>
                 ),
                 if (range != null) ...[
                   const SizedBox(width: 8),
-                  _btn(
-                    g.currentBet == 0 ? 'BET' : 'RAISE',
-                    const Color(0xFFD4A017),
-                    true,
-                    () => setState(() => _raising = !_raising),
-                    icon: _raising
-                        ? Icons.keyboard_arrow_down_rounded
-                        : Icons.keyboard_arrow_up_rounded,
+                  KeyedSubtree(
+                    key: const ValueKey('raise-btn'),
+                    child: _btn(
+                      g.currentBet == 0 ? 'BET' : 'RAISE',
+                      const Color(0xFFD4A017),
+                      true,
+                      () => setState(() => _raising = !_raising),
+                      icon: _raising
+                          ? Icons.keyboard_arrow_down_rounded
+                          : Icons.keyboard_arrow_up_rounded,
+                    ),
                   ),
                 ],
               ],

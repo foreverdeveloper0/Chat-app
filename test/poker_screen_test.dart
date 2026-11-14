@@ -33,8 +33,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text("TEXAS HOLD'EM"), findsOneWidget);
     expect(find.text('Starter Table'), findsOneWidget);
+    expect(find.text('500 Crore Table'), findsOneWidget);
 
     // Joining asks how much to bring; the rest stays in the account.
+    await tester.ensureVisible(find.text('Starter Table'));
+    await tester.pump();
     await tester.tap(find.text('Starter Table'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -118,7 +121,10 @@ void main() {
     // Call (or check), then next time raise, then fold.
     final hand = game.hands;
     final before = you.total, owed = game.toCall(you);
-    await tester.tap(find.textContaining(owed == 0 ? 'CHECK' : 'CALL'));
+    // The button, not the CALL plaques on the table.
+    await tester.tap(
+      find.textContaining(RegExp(r'^(CHECK$|CALL \d|ALL IN \d)')),
+    );
     await tester.pump(const Duration(milliseconds: 100));
     expect(you.total, before + owed);
 
@@ -126,7 +132,7 @@ void main() {
     if (game.hands == hand && game.raiseRange(you) != null) {
       final to = game.raiseRange(you)!.min;
       // RAISE opens the panel; confirm makes the smallest raise.
-      await tester.tap(find.textContaining(RegExp(r'^(BET|RAISE)$')));
+      await tester.tap(find.byKey(const ValueKey('raise-btn')));
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.byKey(const ValueKey('raise-panel')), findsOneWidget);
       expect(find.byKey(const ValueKey('raise-to')), findsOneWidget);
