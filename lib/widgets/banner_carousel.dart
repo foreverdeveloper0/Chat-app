@@ -15,6 +15,10 @@ import '../theme/board_assets.dart';
 /// Width / height of the banner artwork.
 const bannerAspect = 1672 / 941;
 
+/// What the home page shows of it: a short strip, the artwork trimmed a
+/// little top and bottom (the live panel keeps its place on the full size).
+const bannerShown = 2.1;
+
 /// Where the empty slanted panel sits inside every banner, measured on the
 /// artwork as fractions of its size. The panel is a parallelogram whose
 /// sides lean left by [_slant] of the width per unit of height.
@@ -60,10 +64,22 @@ class BannerPanel {
   Matrix4 get matrix {
     final o = _origin;
     return Matrix4(
-      1, 0, 0, 0, //
-      _shear, 1, 0, 0, //
-      0, 0, 1, 0, //
-      o.dx, o.dy, 0, 1,
+      1,
+      0,
+      0,
+      0, //
+      _shear,
+      1,
+      0,
+      0, //
+      0,
+      0,
+      1,
+      0, //
+      o.dx,
+      o.dy,
+      0,
+      1,
     );
   }
 
@@ -198,7 +214,7 @@ class _BannerCarouselState extends State<BannerCarousel> {
       mainAxisSize: MainAxisSize.min,
       children: [
         AspectRatio(
-          aspectRatio: bannerAspect,
+          aspectRatio: bannerShown,
           child: Container(
             padding: const EdgeInsets.all(1.6),
             decoration: BoxDecoration(
@@ -216,9 +232,10 @@ class _BannerCarouselState extends State<BannerCarousel> {
               boxShadow: const [
                 BoxShadow(color: Color(0x667B3FE4), blurRadius: 22),
                 BoxShadow(
-                    color: Color(0x99020310),
-                    blurRadius: 14,
-                    offset: Offset(0, 8)),
+                  color: Color(0x99020310),
+                  blurRadius: 14,
+                  offset: Offset(0, 8),
+                ),
               ],
             ),
             child: ClipRRect(
@@ -239,7 +256,23 @@ class _BannerCarouselState extends State<BannerCarousel> {
                     return GestureDetector(
                       key: ValueKey('banner-${game.key}'),
                       onTap: () => widget.onGame(game),
-                      child: _Slide(game: game, ludo: _ludo),
+                      child: LayoutBuilder(
+                        builder: (context, box) {
+                          final h = box.maxWidth / bannerAspect;
+                          return ClipRect(
+                            child: OverflowBox(
+                              minHeight: h,
+                              maxHeight: h,
+                              alignment: const Alignment(0, .05),
+                              child: SizedBox(
+                                width: box.maxWidth,
+                                height: h,
+                                child: _Slide(game: game, ludo: _ludo),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     );
                   },
                 ),
@@ -278,21 +311,26 @@ class _Slide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, box) {
-      final panel = BannerPanel(box.biggest);
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.asset(game.banner,
-              fit: BoxFit.cover, filterQuality: FilterQuality.medium),
-          switch (game.key) {
-            'ludo' => _LudoLive(panel: panel, game: ludo),
-            'snake' => _SnakeLive(panel: panel),
-            _ => _LogoLive(panel: panel, game: game),
-          },
-        ],
-      );
-    });
+    return LayoutBuilder(
+      builder: (context, box) {
+        final panel = BannerPanel(box.biggest);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              game.banner,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.medium,
+            ),
+            switch (game.key) {
+              'ludo' => _LudoLive(panel: panel, game: ludo),
+              'snake' => _SnakeLive(panel: panel),
+              _ => _LogoLive(panel: panel, game: game),
+            },
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -309,9 +347,12 @@ class _LudoLive extends StatelessWidget {
   Widget build(BuildContext context) {
     final b = panel.edge;
     final cell = b * gridSize / 15;
-    Offset spot(Offset cells) => panel.map(Offset(
+    Offset spot(Offset cells) => panel.map(
+      Offset(
         (gridInset + gridSize * cells.dx / 15) * b,
-        (gridInset + gridSize * cells.dy / 15) * b));
+        (gridInset + gridSize * cells.dy / 15) * b,
+      ),
+    );
 
     // Lay the pawns out, nudging those that share a square apart.
     final sharing = <Offset, int>{};
@@ -340,11 +381,13 @@ class _LudoLive extends StatelessWidget {
           top: 0,
           child: Transform(
             transform: panel.matrix,
-            child: Image.asset(boardAsset,
-                width: b,
-                height: b,
-                fit: BoxFit.fill,
-                filterQuality: FilterQuality.medium),
+            child: Image.asset(
+              boardAsset,
+              width: b,
+              height: b,
+              fit: BoxFit.fill,
+              filterQuality: FilterQuality.medium,
+            ),
           ),
         ),
         for (final (t, foot) in placed)
@@ -408,8 +451,11 @@ class _HopPawnState extends State<_HopPawn>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _hop,
-      child: Image.asset(pawnAssets[widget.player],
-          fit: BoxFit.fill, filterQuality: FilterQuality.medium),
+      child: Image.asset(
+        pawnAssets[widget.player],
+        fit: BoxFit.fill,
+        filterQuality: FilterQuality.medium,
+      ),
       builder: (context, child) {
         final h = math.sin(_hop.value * math.pi);
         return FractionalTranslation(
@@ -479,8 +525,9 @@ class _DemoDiceState extends State<_DemoDice>
         final rebound = flying ? 0.0 : math.sin(l * math.pi) * (1 - l) * .2;
         final lift = (flying ? arc : rebound) * size * .9;
         final left = math.pow(1 - a, 1.6).toDouble();
-        final squash =
-            flying ? 0.0 : math.sin(l * math.pi * 2.5) * (1 - l) * .18;
+        final squash = flying
+            ? 0.0
+            : math.sin(l * math.pi * 2.5) * (1 - l) * .18;
         return SizedBox.square(
           dimension: size,
           child: Stack(
@@ -498,8 +545,9 @@ class _DemoDiceState extends State<_DemoDice>
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                          color: widget.color.withValues(alpha: .8),
-                          blurRadius: size * .4),
+                        color: widget.color.withValues(alpha: .8),
+                        blurRadius: size * .4,
+                      ),
                     ],
                   ),
                 ),
@@ -508,8 +556,12 @@ class _DemoDiceState extends State<_DemoDice>
                 alignment: Alignment.center,
                 transform: Matrix4.identity()
                   ..translateByDouble(0, -lift, 0, 1)
-                  ..scaleByDouble((1 + arc * .3) * (1 + squash),
-                      (1 + arc * .3) * (1 - squash), 1, 1),
+                  ..scaleByDouble(
+                    (1 + arc * .3) * (1 + squash),
+                    (1 + arc * .3) * (1 - squash),
+                    1,
+                    1,
+                  ),
                 child: CustomPaint(
                   size: Size.square(size),
                   painter: _DicePainter(
@@ -538,8 +590,15 @@ class _DicePainter extends CustomPainter {
     if (rx == 0 && ry == 0 && rz == 0) {
       paintDice(canvas, Offset.zero & size, value, angle: -.14);
     } else {
-      paintDice3D(canvas, size.center(Offset(0, -size.height * .04)),
-          size.width * .78, value, rx: rx, ry: ry, rz: rz);
+      paintDice3D(
+        canvas,
+        size.center(Offset(0, -size.height * .04)),
+        size.width * .78,
+        value,
+        rx: rx,
+        ry: ry,
+        rz: rz,
+      );
     }
   }
 
@@ -644,7 +703,8 @@ class _SnakeLiveState extends State<_SnakeLive> {
           () {
             // While riding, glide to the far end of the ladder or snake.
             final riding = slide?.player == p;
-            final at = foot(riding ? slide!.to : _game.position[p]!) +
+            final at =
+                foot(riding ? slide!.to : _game.position[p]!) +
                 Offset((p - 1.5) * g.cellW * .14, 0);
             return AnimatedPositioned(
               key: ValueKey(p),
@@ -654,8 +714,11 @@ class _SnakeLiveState extends State<_SnakeLive> {
               top: at.dy - ph * .92,
               width: pw,
               height: ph,
-              child: Image.asset(pawnAssets[p],
-                  fit: BoxFit.fill, filterQuality: FilterQuality.medium),
+              child: Image.asset(
+                pawnAssets[p],
+                fit: BoxFit.fill,
+                filterQuality: FilterQuality.medium,
+              ),
             );
           }(),
         Positioned(
@@ -726,7 +789,9 @@ class _LogoLiveState extends State<_LogoLive>
                     opacity: .75 + .25 * wave.abs(),
                     child: Container(
                       padding: EdgeInsets.symmetric(
-                          horizontal: w * .09, vertical: w * .022),
+                        horizontal: w * .09,
+                        vertical: w * .022,
+                      ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(w * .1),
                         color: const Color(0xD9050818),
@@ -747,11 +812,13 @@ class _LogoLiveState extends State<_LogoLive>
                 ],
               );
             },
-            child: Image.asset(widget.game.logo,
-                width: w,
-                height: panel.height * .6,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.medium),
+            child: Image.asset(
+              widget.game.logo,
+              width: w,
+              height: panel.height * .6,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.medium,
+            ),
           ),
         ),
       ],

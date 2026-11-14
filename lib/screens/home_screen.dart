@@ -38,8 +38,10 @@ void showComingSoon(BuildContext context, String label) {
         duration: const Duration(milliseconds: 1200),
         backgroundColor: AppColors.cardTop,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        content: Text('$label — coming soon',
-            style: AppText.title.copyWith(fontSize: 15)),
+        content: Text(
+          '$label — coming soon',
+          style: AppText.title.copyWith(fontSize: 15),
+        ),
       ),
     );
 }
@@ -52,7 +54,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _tab = 0;
+  int _tab = BottomNav.home;
 
   @override
   void initState() {
@@ -92,9 +94,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openFeatures() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const FeaturesScreen()),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => const FeaturesScreen()));
   }
 
   @override
@@ -110,56 +111,83 @@ class _HomeScreenState extends State<HomeScreen> {
               child: LayoutBuilder(
                 builder: (context, box) {
                   final scale = box.maxWidth / _designWidth;
-                  const navHeight = 74.0 + 16;
+                  const navHeight = 86.0 + 16;
                   final bodyHeight = box.maxHeight / scale - navHeight;
                   return Column(
                     children: [
                       Expanded(
-                        child: _tab == 0
-                            ? SingleChildScrollView(
-                                physics: const BouncingScrollPhysics(),
-                                child: _Scaled(
-                                  child: ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                        minHeight: math.max(0, bodyHeight)),
-                                    child: Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          10, 10, 10, 8),
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          TopBar(onTap: _onTap),
-                                          const SizedBox(height: 8),
-                                          const BrandHeader(),
-                                          const SizedBox(height: 10),
-                                          BannerCarousel(onGame: _onGame),
-                                          const SizedBox(height: 10),
-                                          const SectionTitle(
-                                              icon:
-                                                  Icons.sports_esports_rounded,
-                                              label: 'OUR GAMES'),
-                                          const SizedBox(height: 10),
-                                          GamesGrid(onGame: _onGame),
-                                          const SizedBox(height: 14),
-                                          const SectionTitle(
-                                              icon: Icons.bolt_rounded,
-                                              label: 'FEATURES'),
-                                          const SizedBox(height: 10),
-                                          FeaturesRow(
-                                              onTap: _onTap,
-                                              onAll: _openFeatures),
-                                        ],
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: _tab == BottomNav.home
+                                  ? SingleChildScrollView(
+                                      physics: const BouncingScrollPhysics(),
+                                      child: _Scaled(
+                                        child: ConstrainedBox(
+                                          constraints: BoxConstraints(
+                                            minHeight: math.max(0, bodyHeight),
+                                          ),
+                                          child: Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                              10,
+                                              10,
+                                              10,
+                                              86,
+                                            ),
+                                            child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                TopBar(onTap: _onTap),
+                                                const SizedBox(height: 8),
+                                                const BrandHeader(),
+                                                const SizedBox(height: 10),
+                                                BannerCarousel(onGame: _onGame),
+                                                const SizedBox(height: 10),
+                                                const SectionTitle(
+                                                  icon: Icons
+                                                      .sports_esports_rounded,
+                                                  label: 'OUR GAMES',
+                                                ),
+                                                const SizedBox(height: 10),
+                                                GamesGrid(onGame: _onGame),
+                                                const SizedBox(height: 14),
+                                                const SectionTitle(
+                                                  icon: Icons.bolt_rounded,
+                                                  label: 'FEATURES',
+                                                ),
+                                                const SizedBox(height: 10),
+                                                FeaturesRow(
+                                                  onTap: _onTap,
+                                                  onAll: _openFeatures,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
+                                    )
+                                  : _Placeholder(BottomNav.items[_tab].$2),
+                            ),
+                            Positioned(
+                              right: 8 * scale,
+                              bottom: 4 * scale,
+                              child: Transform.scale(
+                                scale: scale,
+                                alignment: Alignment.bottomRight,
+                                child: SupportFab(
+                                  onTap: () =>
+                                      showComingSoon(context, 'Live Support'),
                                 ),
-                              )
-                            : _Placeholder(BottomNav.items[_tab].$2),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       _Scaled(
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
+                          padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
                           child: BottomNav(
                             index: _tab,
                             onChanged: (i) => setState(() => _tab = i),
@@ -184,9 +212,9 @@ class _Scaled extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => FittedBox(
-        fit: BoxFit.fitWidth,
-        child: SizedBox(width: _designWidth, child: child),
-      );
+    fit: BoxFit.fitWidth,
+    child: SizedBox(width: _designWidth, child: child),
+  );
 }
 
 class _Placeholder extends StatelessWidget {
@@ -195,17 +223,21 @@ class _Placeholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: AppText.title.copyWith(fontSize: 30)),
-            const SizedBox(height: 6),
-            Text('Coming soon',
-                style: AppText.title
-                    .copyWith(fontSize: 16, color: AppColors.goldSoft)),
-          ],
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: AppText.title.copyWith(fontSize: 30)),
+        const SizedBox(height: 6),
+        Text(
+          'Coming soon',
+          style: AppText.title.copyWith(
+            fontSize: 16,
+            color: AppColors.goldSoft,
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 // ───────────────────────── Ludo modes ─────────────────────────
@@ -248,12 +280,18 @@ Future<void> showLudoModes(BuildContext context, {bool snakes = false}) {
               ),
             ),
             const SizedBox(height: 12),
-            Text(snakes ? 'Snake & Ladder' : 'Ludo',
-                style: AppText.title.copyWith(fontSize: 24)),
+            Text(
+              snakes ? 'Snake & Ladder' : 'Ludo',
+              style: AppText.title.copyWith(fontSize: 24),
+            ),
             const SizedBox(height: 2),
-            Text('Choose how to play',
-                style: AppText.title
-                    .copyWith(fontSize: 13.5, color: AppColors.goldSoft)),
+            Text(
+              'Choose how to play',
+              style: AppText.title.copyWith(
+                fontSize: 13.5,
+                color: AppColors.goldSoft,
+              ),
+            ),
             const SizedBox(height: 14),
             for (final (art, title, sub, ready) in modes)
               Padding(
@@ -262,9 +300,11 @@ Future<void> showLudoModes(BuildContext context, {bool snakes = false}) {
                   onTap: () {
                     Navigator.pop(sheet);
                     if (ready) {
-                      showGameSetup(context,
-                          vsComputer: title == 'Play vs Computer',
-                          snakes: snakes);
+                      showGameSetup(
+                        context,
+                        vsComputer: title == 'Play vs Computer',
+                        snakes: snakes,
+                      );
                     } else {
                       showComingSoon(context, title);
                     }
@@ -273,8 +313,7 @@ Future<void> showLudoModes(BuildContext context, {bool snakes = false}) {
                     height: 66,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: hubCard(
-                      border:
-                          ready ? AppColors.goldTrim : AppColors.cardBorder,
+                      border: ready ? AppColors.goldTrim : AppColors.cardBorder,
                     ),
                     child: Row(
                       children: [
@@ -285,27 +324,37 @@ Future<void> showLudoModes(BuildContext context, {bool snakes = false}) {
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(title,
-                                  style:
-                                      AppText.title.copyWith(fontSize: 17)),
+                              Text(
+                                title,
+                                style: AppText.title.copyWith(fontSize: 17),
+                              ),
                               const SizedBox(height: 3),
-                              Text(sub,
-                                  style: AppText.title.copyWith(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w400,
-                                      color: const Color(0xFF9EA9DC))),
+                              Text(
+                                sub,
+                                style: AppText.title.copyWith(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w400,
+                                  color: const Color(0xFF9EA9DC),
+                                ),
+                              ),
                             ],
                           ),
                         ),
                         if (ready)
-                          const Icon(Icons.play_circle_fill_rounded,
-                              color: AppColors.goldSoft, size: 30)
+                          const Icon(
+                            Icons.play_circle_fill_rounded,
+                            color: AppColors.goldSoft,
+                            size: 30,
+                          )
                         else
-                          Text('SOON',
-                              style: AppText.title.copyWith(
-                                  fontSize: 11,
-                                  letterSpacing: 1,
-                                  color: const Color(0xFF9EA9DC))),
+                          Text(
+                            'SOON',
+                            style: AppText.title.copyWith(
+                              fontSize: 11,
+                              letterSpacing: 1,
+                              color: const Color(0xFF9EA9DC),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -347,14 +396,18 @@ class FeaturesScreen extends StatelessWidget {
                             width: 44,
                             height: 44,
                             decoration: hubCard(radius: 22),
-                            child: const Icon(Icons.arrow_back_rounded,
-                                color: AppColors.cream),
+                            child: const Icon(
+                              Icons.arrow_back_rounded,
+                              color: AppColors.cream,
+                            ),
                           ),
                         ),
                         Expanded(
-                          child: Text('All features',
-                              textAlign: TextAlign.center,
-                              style: AppText.title.copyWith(fontSize: 22)),
+                          child: Text(
+                            'All features',
+                            textAlign: TextAlign.center,
+                            style: AppText.title.copyWith(fontSize: 22),
+                          ),
                         ),
                         const SizedBox(width: 44),
                       ],

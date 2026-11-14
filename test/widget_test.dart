@@ -29,11 +29,29 @@ void main() {
     expect(find.text('OUR GAMES'), findsOneWidget);
     // The carousel opens on the Ludo banner; every game has a logo tile.
     expect(find.byKey(const ValueKey('banner-ludo')), findsOneWidget);
-    for (final key in ['ludo', 'snake', 'carrom', 'ghuti', 'racing', 'fruit', 'poker']) {
+    for (final key in [
+      'ludo',
+      'snake',
+      'carrom',
+      'ghuti',
+      'racing',
+      'fruit',
+      'poker',
+    ]) {
       expect(find.byKey(ValueKey('game-$key')), findsOneWidget);
     }
     expect(find.text('ALL FEATURES'), findsOneWidget);
-    expect(find.textContaining('Wallet'), findsNothing);
+    // The nav bar, the Support button, and Games open on the home page.
+    for (final t in [
+      'Quick Match',
+      'Wallet',
+      'Games',
+      'History',
+      'Profile',
+      'Support',
+    ]) {
+      expect(find.text(t), findsWidgets, reason: t);
+    }
     expect(tester.takeException(), isNull);
 
     // The rest of the features sit behind one button.
@@ -49,7 +67,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    await tester.tap(find.text('Games'));
+    await tester.tap(find.text('Wallet'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Coming soon'), findsOneWidget);
     expect(find.text('OUR GAMES'), findsNothing);
