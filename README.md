@@ -141,10 +141,9 @@ and back to upright when you leave.
   counts down 20 seconds; if yours runs out you check, or fold to a bet.
 - Chips are shown as stacks coloured by value. Each bet sits beside a
   plaque naming the move (blind, call, bet, raise, all in) in its colour.
-- Every move has its own sound slot (deal, card, check, call, raise, all
-  in, fold, your turn, last-seconds tick, win, lose, chips). Until a
-  recording named `assets/sounds/poker<Name>.wav` is added, each borrows
-  an existing sound; see `_standIns` in `lib/game/sounds.dart`.
+- Every move has its own sound: deal, card, check, call, raise, all in,
+  fold, your turn, a tick through your last five seconds, win, lose and
+  chips being collected (`assets/sounds/poker*.wav`).
 - The best five cards from your two and the five on the table win:
   straight flush, four of a kind, full house, flush, straight, three of
   a kind, two pair, pair, high card. Ties split the pot, and a player

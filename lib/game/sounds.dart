@@ -40,23 +40,6 @@ enum Sfx {
   pokerChips,
 }
 
-/// Poker sounds that have no recording of their own yet borrow another.
-/// Drop `assets/sounds/<name>.wav` in and remove its line here.
-const _standIns = {
-  Sfx.pokerDeal: Sfx.diceRoll,
-  Sfx.pokerCard: Sfx.diceLand,
-  Sfx.pokerCheck: Sfx.tap,
-  Sfx.pokerCall: Sfx.pocket,
-  Sfx.pokerRaise: Sfx.bonus,
-  Sfx.pokerAllIn: Sfx.crash,
-  Sfx.pokerFold: Sfx.step,
-  Sfx.pokerTurn: Sfx.turn,
-  Sfx.pokerTick: Sfx.tap,
-  Sfx.pokerWin: Sfx.win,
-  Sfx.pokerLose: Sfx.rank,
-  Sfx.pokerChips: Sfx.pocket,
-};
-
 abstract final class Sounds {
   /// Turned off in widget tests, where there is no audio plugin.
   static bool enabled = true;
@@ -67,7 +50,6 @@ abstract final class Sounds {
 
   static Future<void> play(Sfx sfx, [int variant = 0]) async {
     if (!enabled || muted.value) return;
-    sfx = _standIns[sfx] ?? sfx;
     final file = sfx == Sfx.step ? 'step${variant % 6}' : sfx.name;
     try {
       if (!_configured) {
