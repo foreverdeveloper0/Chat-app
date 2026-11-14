@@ -6,19 +6,26 @@ import 'package:flutter/services.dart';
 
 import '../game/coins.dart';
 import '../game/holdem.dart';
+import '../game/poker_wallet.dart';
 import '../game/sounds.dart';
 import '../theme/app_colors.dart';
+import '../widgets/poker_buyin.dart';
 
-/// Play chips for the card table. They last while the app is open.
-/// How much may be brought to a table with small blind [sb]: from 20 to
-/// 200 big blinds, 100 being the usual stack.
-({int min, int usual, int max}) buyInRange(int sb) =>
-    (min: sb * 40, usual: sb * 200, max: sb * 400);
+export '../game/poker_wallet.dart';
 
-abstract final class PokerWallet {
-  /// 10 lakh crore to start with.
-  static int chips = 10000000000000;
-  static const freeChips = 10000;
+/// How the table is when you sit down at it.
+enum PokerStart {
+  /// A match is already under way, or the table is waiting to start.
+  auto,
+
+  /// The table waits for players: a countdown of up to 20 seconds.
+  wait,
+
+  /// A hand is already running; you join from the next one.
+  running,
+
+  /// Straight into a new hand.
+  now,
 }
 
 /// Texas Hold'em at a table of two to five: you and computer players.
@@ -30,9 +37,13 @@ class PokerScreen extends StatefulWidget {
     required this.smallBlind,
     required this.buyIn,
     this.players = 5,
+    this.tableName = 'Table',
+    this.start = PokerStart.auto,
   });
 
   final int smallBlind, buyIn, players;
+  final String tableName;
+  final PokerStart start;
 
   @visibleForTesting
   static Holdem? debugGame;
@@ -46,10 +57,10 @@ class PokerScreen extends StatefulWidget {
 const _art = Size(1870, 841);
 const _seatSpots = [
   Offset(935, 656),
-  Offset(178, 548),
-  Offset(270, 226),
-  Offset(1440, 226),
-  Offset(1502, 548),
+  Offset(300, 545),
+  Offset(300, 232),
+  Offset(1570, 232),
+  Offset(1570, 545),
 ];
 
 /// Sizes, in the picture's coordinates.
@@ -83,6 +94,27 @@ class _PokerScreenState extends State<PokerScreen>
   Offset _origin = Offset.zero;
 
   bool _dealing = false, _left = false;
+
+  /// You stood up (or ran out of chips): the SIT DOWN button shows.
+  bool _standing = false;
+  String _standingWhy = '';
+
+  /// The table has been cleared between hands: no cards, pot or badges.
+  bool _cleared = false;
+
+  /// The countdown before the next hand, in seconds left and in all.
+  int _wait = 0, _waitTotal = 0;
+  String _waitLabel = '';
+  Timer? _waitTimer;
+
+  /// For a hand set up before you arrived: its number and how many board
+  /// cards were already out, so those appear at once instead of flying in.
+  int _warmHand = -1, _warmBoard = 0;
+
+  /// Whether the device asks for less motion.
+  bool _still = false;
+
+  final _rng = math.Random();
 
   /// The street bet your RAISE button would make.
   int _raiseTo = 0;
@@ -131,7 +163,24 @@ class _PokerScreenState extends State<PokerScreen>
       players: widget.players,
     );
     PokerScreen.debugGame = _game;
-    _later(700, _deal);
+    // Sitting down: a match is already running, or the table is waiting
+    // to start (never for more than 20 seconds).
+    final start = widget.start != PokerStart.auto
+        ? widget.start
+        : widget.players >= 3 && _rng.nextDouble() < .6
+        ? PokerStart.running
+        : PokerStart.wait;
+    switch (start) {
+      case PokerStart.now || PokerStart.auto:
+        _later(700, _deal);
+      case PokerStart.wait:
+        _later(
+          400,
+          () => _countdown(8 + _rng.nextInt(13), 'Match starting', _deal),
+        );
+      case PokerStart.running:
+        _later(300, _joinRunning);
+    }
   }
 
   @override
@@ -139,6 +188,7 @@ class _PokerScreenState extends State<PokerScreen>
     for (final t in _timers) {
       t.cancel();
     }
+    _waitTimer?.cancel();
     _clock.dispose();
     _cashOut();
     // Back to the app's upright layout.
@@ -165,21 +215,84 @@ class _PokerScreenState extends State<PokerScreen>
 
   // ── Flow ──
 
-  void _deal() {
+  /// A countdown on the table: [label], then [done] after [seconds].
+  void _countdown(int seconds, String label, VoidCallback done) {
+    _waitTimer?.cancel();
+    setState(() {
+      _wait = seconds;
+      _waitTotal = seconds;
+      _waitLabel = label;
+    });
+    _waitTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      if (_wait <= 1) {
+        t.cancel();
+        setState(() => _wait = 0);
+        done();
+      } else {
+        setState(() => _wait--);
+      }
+    });
+  }
+
+  /// Chips of yours that are left on the table while you are standing go
+  /// back to the account.
+  void _collect() {
+    final you = _game.you;
+    // Only while you are standing; waiting for the next hand is not that.
+    if (!_standing || you.chips == 0) return;
+    if (_game.playing && you.live) return;
+    PokerWallet.chips += you.chips;
+    you.chips = 0;
+  }
+
+  /// A match that was already under way when you sat down: the first
+  /// round of betting is over, the flop is out, and you wait for the next
+  /// hand.
+  void _joinRunning() {
     final g = _game;
-    if (g.you.chips < g.bigBlind) {
-      _outOfChips();
+    g.you.away = true;
+    if (!g.deal()) {
+      g.you.away = false;
+      _countdown(8 + _rng.nextInt(13), 'Match starting', _deal);
       return;
     }
-    g.rebuyBots();
+    var guard = 0;
+    while (g.playing && g.street == Street.preflop && guard++ < 80) {
+      g.awaitingStreet ? g.nextStreet() : g.botTurn();
+    }
     setState(() {
-      g.deal();
-      _dealing = true;
+      _warmHand = g.hands;
+      _warmBoard = g.board.length;
+      _cleared = false;
     });
+    _advance();
+  }
+
+  void _deal() {
+    final g = _game;
+    // Out of chips: you stand up, and may buy in again.
+    if (!g.you.away && g.you.chips < g.bigBlind) _bust();
+    g.rebuyBots();
+    var dealt = false;
+    setState(() {
+      _cleared = false;
+      dealt = g.deal();
+      _dealing = dealt;
+    });
+    if (!dealt) {
+      // Fewer than two players with chips: wait for someone to sit.
+      _later(1500, _deal);
+      return;
+    }
     Sounds.play(Sfx.pokerDeal);
     _fly(g.smallBlindSeat, toPot: true);
     _fly(g.bigBlindSeat, toPot: true);
-    _later(1200, () {
+    final cards = g.seats.where((s) => s.inHand).length * 2;
+    _later(cards * 110 + 800, () {
       setState(() => _dealing = false);
       _advance();
     });
@@ -198,8 +311,16 @@ class _PokerScreenState extends State<PokerScreen>
       _clock.stop();
       _later(650, () {
         setState(g.nextStreet);
-        if (g.playing) Sounds.play(Sfx.pokerCard);
-        _later(450, _advance);
+        if (!g.playing) {
+          _later(450, _advance);
+          return;
+        }
+        // The flop comes out one card at a time; the turn and river singly.
+        final n = g.street == Street.flop ? 3 : 1;
+        for (var i = 0; i < n; i++) {
+          _later(i * 320 + 150, () => Sounds.play(Sfx.pokerCard));
+        }
+        _later(n == 3 ? 1500 : 900, _advance);
       });
       return;
     }
@@ -246,9 +367,10 @@ class _PokerScreenState extends State<PokerScreen>
   }
 
   void _finish() {
-    final r = _game.result!;
+    final g = _game;
+    final r = g.result!;
     setState(() {});
-    final won = r.winnings.containsKey(_game.you);
+    final won = r.winnings.containsKey(g.you);
     _later(600, () {
       for (final w in r.winnings.keys) {
         for (var i = 0; i < 5; i++) {
@@ -259,7 +381,14 @@ class _PokerScreenState extends State<PokerScreen>
       _later(350, () => Sounds.play(Sfx.pokerChips));
       if (won) HapticFeedback.heavyImpact();
     });
-    _later(r.revealed.isEmpty ? 2600 : 4600, _deal);
+    // Show the result, clear the table, count down to the next hand.
+    _later(r.revealed.isEmpty ? 2600 : 4400, () {
+      _collect();
+      // Somebody who arrived mid-hand is dealt in from here.
+      if (!_standing) g.you.away = false;
+      setState(() => _cleared = true);
+      _countdown(_standing ? 5 : 4, 'Next hand', _deal);
+    });
   }
 
   bool get _myTurn {
@@ -283,45 +412,81 @@ class _PokerScreenState extends State<PokerScreen>
     _later(350, _advance);
   }
 
-  /// Busted: buy in again from the account, or take free chips when the
-  /// account cannot cover the table's minimum.
-  Future<void> _outOfChips() async {
-    final range = buyInRange(widget.smallBlind);
-    final bank = PokerWallet.chips;
-    final canRebuy = bank >= range.min;
-    final amount = canRebuy
-        ? math.min(range.usual, bank)
-        : PokerWallet.freeChips;
-    final stay = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (d) => _Dialog(
-        title: 'Out of chips',
-        body: canRebuy
-            ? 'Bring ${formatCoins(amount)} more from your account '
-                  '(${formatCoins(bank)}) and keep playing?'
-            : 'Your account is empty too. Take '
-                  '${formatCoins(amount)} free chips and keep playing?',
-        actions: [
-          ('LEAVE', const Color(0xFF2A3A9A), () => Navigator.pop(d, false)),
-          (
-            canRebuy ? 'BUY IN' : 'FREE CHIPS',
-            const Color(0xFF1FA35C),
-            () => Navigator.pop(d, true),
-          ),
-        ],
-      ),
-    );
-    if (!mounted) return;
-    if (stay ?? false) {
-      setState(() {
-        if (canRebuy) PokerWallet.chips -= amount;
-        _game.you.chips += amount;
-      });
-      _later(400, _deal);
-    } else {
-      Navigator.of(context).pop();
+  /// Out of chips: you stand up, and can buy in again from the account.
+  void _bust() {
+    final g = _game;
+    _standing = true;
+    _standingWhy = 'Out of chips';
+    g.you.away = true;
+    _collect();
+    if (mounted) setState(() {});
+  }
+
+  /// Stands you up: your chips go back to the account and you watch.
+  /// Standing in the middle of a hand folds you.
+  void _standUp() {
+    final g = _game, you = g.you;
+    if (_standing) return;
+    final inPlay = g.playing && you.live && !you.allIn;
+    if (inPlay) {
+      // Drop anything queued for your turn; the hand is re-driven below.
+      for (final t in _timers) {
+        t.cancel();
+      }
+      _timers.clear();
+      _clock.stop();
     }
+    g.standUp(you);
+    _standing = true;
+    _collect();
+    setState(() {
+      _standingWhy = 'You are standing';
+      _raising = false;
+      if (inPlay) _dealing = false;
+    });
+    if (inPlay) _advance();
+  }
+
+  /// Sits you back down: choose a buy-in from the account.
+  Future<void> _sit() async {
+    if (!_standing) return;
+    final range = buyInRange(widget.smallBlind);
+    if (PokerWallet.chips < range.min) {
+      final take = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (d) => _Dialog(
+          title: 'Account empty',
+          body:
+              'You need at least ${_short(range.min)} to sit here. Take '
+              '${_short(PokerWallet.freeChips)} free chips?',
+          actions: [
+            ('NO', const Color(0xFF2A3A9A), () => Navigator.pop(d, false)),
+            (
+              'FREE CHIPS',
+              const Color(0xFF1FA35C),
+              () => Navigator.pop(d, true),
+            ),
+          ],
+        ),
+      );
+      if (!(take ?? false) || !mounted) return;
+      setState(() => PokerWallet.chips += PokerWallet.freeChips);
+      if (PokerWallet.chips < range.min) return;
+    }
+    if (!mounted) return;
+    final amount = await showBuyIn(
+      context,
+      widget.tableName,
+      widget.smallBlind,
+    );
+    if (amount == null || !mounted) return;
+    PokerWallet.chips -= amount;
+    Sounds.play(Sfx.pokerChips);
+    setState(() {
+      _game.sitDown(_game.you, amount);
+      _standing = false;
+    });
   }
 
   // ── Layout ──
@@ -372,6 +537,7 @@ class _PokerScreenState extends State<PokerScreen>
             math.max(0, (room - _art.height * _k) / 2),
           );
           final g = _game;
+          _still = MediaQuery.disableAnimationsOf(context);
           return Stack(
             fit: StackFit.expand,
             children: [
@@ -394,6 +560,25 @@ class _PokerScreenState extends State<PokerScreen>
                   fit: BoxFit.fill,
                 ),
               ),
+              // Five places for the community cards, each the size of a card.
+              Positioned.fill(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _SlotsPainter([
+                      for (var i = 0; i < 5; i++)
+                        Rect.fromCenter(
+                          center: _at(
+                            _boardAt.dx + (i - 2) * _boardGap,
+                            _boardAt.dy,
+                          ),
+                          width: _boardCard * _k,
+                          height: _boardCard * 1.4 * _k,
+                        ),
+                    ]),
+                  ),
+                ),
+              ),
+              if (_wait > 0) _countdownRing(),
               ..._board(g),
               _potLabel(g),
               for (final s in g.seats) ..._seat(s),
@@ -416,7 +601,7 @@ class _PokerScreenState extends State<PokerScreen>
                   },
                   child: const _Chip(size: 22),
                 ),
-              if (g.result != null) _resultBanner(g.result!),
+              if (g.result != null && !_cleared) _resultBanner(g.result!),
               _topBar(g),
               _actions(g),
             ],
@@ -447,7 +632,7 @@ class _PokerScreenState extends State<PokerScreen>
                 const _Chip(size: 16),
                 const SizedBox(width: 6),
                 Text(
-                  _short(g.you.chips),
+                  _standing ? '—' : _short(g.you.chips),
                   key: const ValueKey('my-chips'),
                   style: _text(12.5),
                 ),
@@ -475,8 +660,11 @@ class _PokerScreenState extends State<PokerScreen>
             ),
           ),
           const SizedBox(width: 6),
-          Flexible(child: _status(g)),
-          const Spacer(),
+          // Takes all the room between, so the right-hand buttons sit in
+          // the corner.
+          Expanded(
+            child: Align(alignment: Alignment.centerLeft, child: _status(g)),
+          ),
           _pill(
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -523,22 +711,42 @@ class _PokerScreenState extends State<PokerScreen>
         ),
       );
 
-  /// Sound on or off, or leave the table.
+  /// Stand up or sit down, sound on or off, or leave the table.
   Future<void> _menu() => showDialog<void>(
     context: context,
     builder: (d) => ValueListenableBuilder(
       valueListenable: Sounds.muted,
       builder: (context, muted, _) => _Dialog(
         title: 'Menu',
-        body: 'Sound is ${muted ? 'off' : 'on'}.',
+        body: _standing
+            ? 'You are standing. Your chips are in your account.'
+            : 'Sound is ${muted ? 'off' : 'on'}.',
         actions: [
+          if (_standing)
+            (
+              'SIT DOWN',
+              const Color(0xFF1FA35C),
+              () {
+                Navigator.pop(d);
+                _sit();
+              },
+            )
+          else
+            (
+              'STAND UP',
+              const Color(0xFF2E6BE0),
+              () {
+                Navigator.pop(d);
+                _standUp();
+              },
+            ),
           (
             muted ? 'SOUND ON' : 'SOUND OFF',
-            const Color(0xFF2E6BE0),
+            const Color(0xFF7B4FD0),
             () => Sounds.muted.value = !muted,
           ),
           (
-            'LEAVE',
+            'LEAVE TABLE',
             const Color(0xFFC0392B),
             () {
               Navigator.pop(d);
@@ -555,10 +763,18 @@ class _PokerScreenState extends State<PokerScreen>
     final you = g.you;
     final mine = _myTurn;
     final String status;
-    if (!g.playing) {
-      status = g.result == null ? 'Dealing…' : 'Next hand…';
+    if (_standing) {
+      status = _standingWhy;
+    } else if (_wait > 0) {
+      status = '$_waitLabel…';
+    } else if (!g.playing) {
+      status = g.seats.where((s) => s.chips > 0 && !s.away).length < 2
+          ? 'Waiting for players…'
+          : 'Dealing…';
     } else if (_dealing) {
       status = 'Dealing…';
+    } else if (you.away) {
+      status = 'Hand in progress — you play the next one';
     } else if (you.folded) {
       status = 'You folded';
     } else if (!you.inHand) {
@@ -587,6 +803,84 @@ class _PokerScreenState extends State<PokerScreen>
           style: _text(11.5, Colors.white, FontWeight.w600),
         ),
       ),
+    );
+  }
+
+  /// The table's countdown, in the middle of the felt: a ring that runs
+  /// down, the seconds left, and what it is counting to.
+  Widget _countdownRing() {
+    final d = 132 * _k;
+    return _place(
+      _at(_boardAt.dx, _boardAt.dy),
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            key: const ValueKey('table-countdown'),
+            width: d,
+            height: d,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const RadialGradient(
+                      colors: [Color(0xF0301048), Color(0xF00B0416)],
+                    ),
+                    border: Border.all(
+                      color: const Color(0x88FFD45F),
+                      width: 1.2,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x99000000), blurRadius: 10),
+                    ],
+                  ),
+                ),
+                // Runs down smoothly through each second.
+                TweenAnimationBuilder<double>(
+                  key: ValueKey('ring-$_wait'),
+                  tween: Tween(
+                    begin: _wait / _waitTotal,
+                    end: (_wait - 1) / _waitTotal,
+                  ),
+                  duration: Duration(seconds: _still ? 0 : 1),
+                  builder: (context, v, _) => CustomPaint(
+                    size: Size.square(d),
+                    painter: _RingPainter(v.clamp(0.0, 1.0)),
+                  ),
+                ),
+                Text(
+                  '$_wait',
+                  key: const ValueKey('countdown-seconds'),
+                  style: _text(56 * _k, const Color(0xFFFFE28A)),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 10 * _k),
+          Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: 18 * _k,
+              vertical: 5 * _k,
+            ),
+            decoration: BoxDecoration(
+              color: const Color(0xE6170722),
+              borderRadius: BorderRadius.circular(20 * _k),
+              border: Border.all(color: const Color(0x88FFD45F), width: .9),
+            ),
+            child: Text(
+              _waitLabel.toUpperCase(),
+              style: _text(
+                21 * _k,
+                const Color(0xFFFFE28A),
+                FontWeight.w600,
+              ).copyWith(letterSpacing: 1.5),
+            ),
+          ),
+        ],
+      ),
+      width: 420,
     );
   }
 
@@ -628,7 +922,7 @@ class _PokerScreenState extends State<PokerScreen>
             Text('POT', style: _text(26 * _k)),
             SizedBox(width: 14 * _k),
             Text(
-              formatCoins(g.pot),
+              formatCoins(_cleared ? 0 : g.pot),
               key: const ValueKey('pot'),
               style: _text(34 * _k, const Color(0xFFFFE28A)),
             ),
@@ -639,19 +933,32 @@ class _PokerScreenState extends State<PokerScreen>
     width: 600,
   );
 
-  /// The five community cards, each exactly on its place.
+  /// The five community cards, each exactly on its place. They fly out
+  /// from the dealer one at a time (the flop three, a third of a second
+  /// apart) face down, and turn over where they land.
   List<Widget> _board(Holdem g) {
+    if (_cleared) return const [];
     final cw = _boardCard * _k;
     return [
       for (var i = 0; i < g.board.length; i++)
-        _dealt(
-          key: 'b-${g.hands}-$i',
-          order: i < 3 ? i : 0,
-          to:
-              _at(_boardAt.dx + (i - 2) * _boardGap, _boardAt.dy) -
-              Offset(cw / 2, cw * .7),
-          child: _CardView(card: g.board[i], faceUp: true, width: cw),
-        ),
+        () {
+          final now = g.hands == _warmHand && i < _warmBoard;
+          final delay = i < 3 ? i * 320 : 0;
+          return _dealt(
+            key: 'b-${g.hands}-$i',
+            delay: delay,
+            instant: now,
+            to:
+                _at(_boardAt.dx + (i - 2) * _boardGap, _boardAt.dy) -
+                Offset(cw / 2, cw * .7),
+            child: _FlipIn(
+              card: g.board[i],
+              width: cw,
+              after: delay + 460 + 60,
+              instant: now || _still,
+            ),
+          );
+        }(),
     ];
   }
 
@@ -673,40 +980,65 @@ class _PokerScreenState extends State<PokerScreen>
       _spot(s.index) +
       (s.index == 0 ? const Offset(0, 160) : const Offset(0, 152)) * _k;
 
-  /// The back of a seat: a computer player's two cards behind the upper
-  /// right of the avatar, then the avatar with its turn ring.
+  /// Which way the middle of the table lies from a seat: 1 for the left
+  /// side, -1 for the right.
+  double _inward(int seat) =>
+      _spot(seat).dx < _origin.dx + _art.width * _k / 2 ? 1 : -1;
+
+  /// Milliseconds before [s]'s [card]th card leaves the dealer: one card
+  /// to each player in turn, twice round the table.
+  int _dealDelay(Seat s, int card) {
+    final g = _game;
+    final order = [
+      for (var k = 1; k <= g.seats.length; k++)
+        g.seats[(g.dealer + k) % g.seats.length],
+    ].where((x) => x.inHand).toList();
+    final place = order.contains(s) ? order.indexOf(s) : 0;
+    return (card * order.length + place) * 110;
+  }
+
+  /// The back of a seat: a computer player's two cards beside the avatar
+  /// (always on the side nearest the table), then the avatar with its
+  /// turn ring.
   List<Widget> _seat(Seat s) {
     final g = _game;
     final at = _spot(s.index);
     final turn = _myTurnOf(s);
     final r = g.result;
-    final winner = r?.winnings.containsKey(s) ?? false;
+    final standing = s.index == 0 && _standing;
+    final folded = s.folded && !_cleared && !standing;
+    final winner = (r?.winnings.containsKey(s) ?? false) && !_cleared;
+    final inward = _inward(s.index);
     final radius = _radius(s);
-    final reveal = r?.revealed.contains(s) ?? false;
-    final dim = s.folded || !s.inHand;
+    final reveal = (r?.revealed.contains(s) ?? false) && !_cleared;
+    final me = s.index == 0;
+    final dim = folded || (!s.inHand && !(me && !_standing)) && !_cleared;
     final cardW = (reveal ? 84 : 64) * _k;
     final cardsAt =
-        at + (reveal ? const Offset(150, -48) : const Offset(128, -44)) * _k;
+        at + Offset((reveal ? 150 : 128) * inward, reveal ? -48 : -44) * _k;
+    final warm = g.hands == _warmHand;
     return [
-      if (s.bot && s.inHand)
+      if (s.bot && s.inHand && !_cleared)
         for (var i = 0; i < s.hole.length; i++)
           _dealt(
             key: 'c-${g.hands}-${s.index}-$i',
-            order: s.index * 2 + i,
+            delay: _dealDelay(s, i),
+            instant: warm,
             to:
                 cardsAt +
                 Offset(
-                  (i - .5) * cardW * (reveal ? 1.04 : .5) - cardW / 2,
+                  (i - .5) * cardW * (reveal ? 1.04 : .5) * inward - cardW / 2,
                   -cardW * .7,
                 ),
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 250),
-              opacity: s.folded ? 0 : 1,
+              opacity: folded ? 0 : 1,
               child: AnimatedScale(
                 duration: const Duration(milliseconds: 250),
-                scale: s.folded ? .5 : 1,
+                scale: folded ? .5 : 1,
                 child: Transform.rotate(
-                  angle: reveal ? 0 : .22 + (i - .5) * .26,
+                  // Fanned the same way on both sides of the table.
+                  angle: reveal ? 0 : inward * (.22 + (i - .5) * .26),
                   child: _CardView(
                     card: s.hole[i],
                     faceUp: reveal,
@@ -740,16 +1072,19 @@ class _PokerScreenState extends State<PokerScreen>
               SizedBox(
                 width: radius * 2,
                 height: radius * 2,
-                child: CustomPaint(
-                  painter: _AvatarPainter(
-                    // Out of the hand: the colour drains away.
-                    dim ? const Color(0xFF6E6E80) : _colours[s.index],
-                    s.name.characters.first,
-                    dim: dim,
-                  ),
-                ),
+                child: me && _standing
+                    // An empty chair.
+                    ? CustomPaint(painter: const _EmptySeatPainter())
+                    : CustomPaint(
+                        painter: _AvatarPainter(
+                          // Out of the hand: the colour drains away.
+                          dim ? const Color(0xFF6E6E80) : _colours[s.index],
+                          s.name.characters.first,
+                          dim: dim,
+                        ),
+                      ),
               ),
-              if (s.folded) _foldMark(radius),
+              if (folded) _foldMark(radius),
               // The turn timer runs round the ring.
               if (turn)
                 AnimatedBuilder(
@@ -841,18 +1176,27 @@ class _PokerScreenState extends State<PokerScreen>
           // Chips only: the name has its own tag above the picture.
           child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _Chip(size: 27 * _k),
-                SizedBox(width: 9 * _k),
-                Text(
-                  formatCoins(s.chips),
-                  maxLines: 1,
-                  style: _text(27 * _k, const Color(0xFFFFE28A)),
-                ),
-              ],
-            ),
+            child: me && _standing
+                ? Text(
+                    'Empty seat',
+                    style: _text(
+                      26 * _k,
+                      const Color(0xFFB8A3D6),
+                      FontWeight.w500,
+                    ),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _Chip(size: 27 * _k),
+                      SizedBox(width: 9 * _k),
+                      Text(
+                        formatCoins(s.chips),
+                        maxLines: 1,
+                        style: _text(27 * _k, const Color(0xFFFFE28A)),
+                      ),
+                    ],
+                  ),
           ),
         ),
         width: 500,
@@ -878,7 +1222,7 @@ class _PokerScreenState extends State<PokerScreen>
         width: 200,
       ),
       // Dealer button, at the avatar's lower right.
-      if (g.dealer == s.index)
+      if (g.dealer == s.index && !(me && _standing))
         _place(
           // Yours sits to the left of your picture, clear of your cards.
           at +
@@ -918,13 +1262,20 @@ class _PokerScreenState extends State<PokerScreen>
   /// call, bet, raise, all in); or check, fold, the hand shown, a win.
   Widget? _badge(Seat s) {
     final g = _game, r = g.result;
-    if (!s.inHand) return null;
+    if (_cleared) return null;
     String top, bottom = '';
     var fill = const Color(0xFF14101C), edge = const Color(0xFFFFD45F);
     final won = r?.winnings[s];
-    // A folded player's picture already says so.
-    if (s.folded) return null;
-    if (r != null && r.revealed.contains(s)) {
+    if (s.index == 0 && s.away && !_standing && g.playing) {
+      // Sat down in the middle of a hand: wait for the next one.
+      top = 'Next hand';
+      edge = const Color(0xFF8FA2FF);
+    } else if (!s.inHand) {
+      return null;
+    } else if (s.folded) {
+      // A folded player's picture already says so.
+      return null;
+    } else if (r != null && r.revealed.contains(s)) {
       top = r.values[s]!.rank.label;
       if (won != null) bottom = '+${formatCoins(won)}';
     } else if (won != null) {
@@ -999,19 +1350,23 @@ class _PokerScreenState extends State<PokerScreen>
     return g.playing && !_dealing && !g.awaitingStreet && g.turn == s.index;
   }
 
-  /// Your two cards, face up, standing just above your name plate.
+  /// Your two cards, standing above your chips. They come from the dealer
+  /// face down, in turn with everyone else's, and turn over as they land.
   List<Widget> _yourCards(Holdem g) {
     final you = g.you;
-    if (!you.inHand || you.hole.isEmpty) return const [];
+    if (!you.inHand || you.hole.isEmpty || _cleared || _standing) {
+      return const [];
+    }
     final cw = 100 * _k;
-    // Their lower edge tucks a little behind the plate.
     // Centred under your picture, their lower edge behind the chips.
     final bottom = _plateAt(you) + Offset(0, 14 * _k);
+    final warm = g.hands == _warmHand;
     return [
       for (var i = 0; i < 2; i++)
         _dealt(
           key: 'c-${g.hands}-0-$i',
-          order: i,
+          delay: _dealDelay(you, i),
+          instant: warm,
           to: bottom + Offset((i - .5) * cw * .86 - cw / 2, -cw * 1.4),
           // Folded: your cards stay where they are, drained to grey.
           child: ColorFiltered(
@@ -1025,32 +1380,55 @@ class _PokerScreenState extends State<PokerScreen>
                 : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
             child: Transform.rotate(
               angle: (i - .5) * .2,
-              child: _CardView(card: you.hole[i], faceUp: true, width: cw),
+              child: _FlipIn(
+                card: you.hole[i],
+                width: cw,
+                after: _dealDelay(you, i) + 460 + 120,
+                instant: warm || _still,
+              ),
             ),
           ),
         ),
     ];
   }
 
-  /// A card that flies in from the dealer.
+  /// A card that flies out of the dealer after [delay] milliseconds,
+  /// spinning and growing as it goes, and lands at [to]. With [instant]
+  /// (or reduced motion) it is simply there.
   Widget _dealt({
     required String key,
-    required int order,
+    required int delay,
     required Offset to,
     required Widget child,
+    bool instant = false,
   }) {
-    final start = (order * .07).clamp(0.0, .7);
+    if (instant || _still) {
+      return Positioned(
+        key: ValueKey(key),
+        left: to.dx,
+        top: to.dy,
+        child: child,
+      );
+    }
+    const fly = 460;
+    final total = delay + fly;
     return TweenAnimationBuilder<double>(
       key: ValueKey(key),
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 1000),
-      curve: Interval(start, math.min(1, start + .3), curve: Curves.easeOut),
+      duration: Duration(milliseconds: total),
+      curve: Interval(delay / total, 1, curve: Curves.easeOutCubic),
       builder: (context, t, c) {
         final p = Offset.lerp(_dealerAt, to, t)!;
         return Positioned(
           left: p.dx,
           top: p.dy,
-          child: Opacity(opacity: t == 0 ? 0 : 1, child: c),
+          child: Opacity(
+            opacity: t == 0 ? 0 : 1,
+            child: Transform.rotate(
+              angle: (1 - t) * -1.2,
+              child: Transform.scale(scale: .5 + .5 * t, child: c),
+            ),
+          ),
         );
       },
       child: child,
@@ -1124,7 +1502,30 @@ class _PokerScreenState extends State<PokerScreen>
     final top = math.min(plate.dy - bh / 2, size.height - bh - 4);
     final leftEdge = plate.dx - _myPlate.width / 2 * _k - gap;
     final rightEdge = plate.dx + _myPlate.width / 2 * _k + gap;
-    // Only while it is your turn.
+    // Standing: one button to sit down again.
+    if (_standing) {
+      return Stack(
+        children: [
+          Positioned(
+            left: rightEdge,
+            top: top,
+            child: KeyedSubtree(
+              key: const ValueKey('sit-btn'),
+              child: _btn(
+                'SIT DOWN',
+                Icons.event_seat_rounded,
+                const Color(0xFFE09A12),
+                true,
+                _sit,
+                bw * 1.15,
+                bh,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    // Otherwise only while it is your turn.
     if (!mine) return const SizedBox.shrink();
     return Stack(
       children: [
@@ -1764,6 +2165,21 @@ class _Dialog extends StatelessWidget {
   final String title, body;
   final List<(String, Color, VoidCallback)> actions;
 
+  Widget _dialogButton(String label, Color colour, VoidCallback onTap) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 44,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: colour,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFFFE28A), width: 1.5),
+          ),
+          child: Text(label, style: _text(14)),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) => Center(
     child: Material(
@@ -1791,32 +2207,24 @@ class _Dialog extends StatelessWidget {
               style: _text(13.5, Colors.white, FontWeight.w500),
             ),
             const SizedBox(height: 14),
-            Row(
-              children: [
-                for (final (label, colour, onTap) in actions)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: GestureDetector(
-                        onTap: onTap,
-                        child: Container(
-                          height: 44,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: colour,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: const Color(0xFFFFE28A),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Text(label, style: _text(14)),
-                        ),
+            if (actions.length > 2)
+              for (final (label, colour, onTap) in actions)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _dialogButton(label, colour, onTap),
+                )
+            else
+              Row(
+                children: [
+                  for (final (label, colour, onTap) in actions)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: _dialogButton(label, colour, onTap),
                       ),
                     ),
-                  ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
       ),
@@ -1917,4 +2325,217 @@ class _TimerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TimerPainter old) => old.left != left;
+}
+
+/// A card that starts face down and turns over after [after] milliseconds
+/// (at once with [instant]).
+class _FlipIn extends StatefulWidget {
+  const _FlipIn({
+    required this.card,
+    required this.width,
+    required this.after,
+    this.instant = false,
+  });
+  final PlayingCard card;
+  final double width;
+  final int after;
+  final bool instant;
+
+  @override
+  State<_FlipIn> createState() => _FlipInState();
+}
+
+class _FlipInState extends State<_FlipIn> {
+  late bool _up = widget.instant;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_up) {
+      _timer = Timer(Duration(milliseconds: widget.after), () {
+        if (mounted) setState(() => _up = true);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      _CardView(card: widget.card, faceUp: _up, width: widget.width);
+}
+
+/// A ring that is full at 1 and empties clockwise to 0.
+class _RingPainter extends CustomPainter {
+  const _RingPainter(this.left);
+  final double left;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = (Offset.zero & size).deflate(size.width * .06);
+    canvas.drawCircle(
+      rect.center,
+      rect.width / 2,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * .075
+        ..color = const Color(0x33FFFFFF),
+    );
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      math.pi * 2 * left,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * .075
+        ..strokeCap = StrokeCap.round
+        ..shader = const SweepGradient(
+          startAngle: -math.pi / 2,
+          endAngle: math.pi * 1.5,
+          colors: [Color(0xFFFFF1B8), Color(0xFFE3B341), Color(0xFFFFD45F)],
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) => old.left != left;
+}
+
+/// The five places for the community cards: a sunken, card-sized pocket
+/// with a dashed gold edge and a faint suit, and FLOP, TURN and RIVER
+/// written under them, so it is plain where the cards will land.
+class _SlotsPainter extends CustomPainter {
+  const _SlotsPainter(this.slots);
+  final List<Rect> slots;
+
+  static const _suits = [0, 1, 3, 2, 0];
+
+  static void _dashed(Canvas canvas, RRect rr, Paint paint, double dash) {
+    for (final m in (Path()..addRRect(rr)).computeMetrics()) {
+      for (var d = 0.0; d < m.length; d += dash * 1.8) {
+        canvas.drawPath(m.extractPath(d, math.min(d + dash, m.length)), paint);
+      }
+    }
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (var i = 0; i < slots.length; i++) {
+      final r = slots[i];
+      final rr = RRect.fromRectAndRadius(r, Radius.circular(r.width * .12));
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0x66000000), Color(0x26000000)],
+          ).createShader(r),
+      );
+      // A lit lower lip, so the pocket looks sunk into the felt.
+      canvas.drawRRect(
+        rr.shift(const Offset(0, 1.5)),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..color = const Color(0x22FFFFFF),
+      );
+      _dashed(
+        canvas,
+        rr.deflate(1.4),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = math.max(1.2, r.width * .016)
+          ..strokeCap = StrokeCap.round
+          ..color = const Color(0xBBFFD45F),
+        r.width * .07,
+      );
+      _CardPainter._suit(
+        canvas,
+        _suits[i % _suits.length],
+        r.center,
+        r.width * .4,
+        const Color(0x22FFFFFF),
+      );
+    }
+    if (slots.length < 5) return;
+    void caption(String text, Rect a, Rect b) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: TextStyle(
+            fontFamily: AppText.family,
+            fontWeight: FontWeight.w600,
+            fontSize: math.max(8.0, a.width * .15),
+            letterSpacing: 2,
+            color: const Color(0x88FFE295),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final y = a.bottom + a.width * .14, cx = (a.left + b.right) / 2;
+      final line = Paint()
+        ..color = const Color(0x44FFD45F)
+        ..strokeWidth = 1;
+      final gap = tp.width / 2 + 7;
+      canvas.drawLine(Offset(a.left, y), Offset(cx - gap, y), line);
+      canvas.drawLine(Offset(cx + gap, y), Offset(b.right, y), line);
+      tp.paint(canvas, Offset(cx - tp.width / 2, y - tp.height / 2));
+    }
+
+    caption('FLOP', slots[0], slots[2]);
+    caption('TURN', slots[3], slots[3]);
+    caption('RIVER', slots[4], slots[4]);
+  }
+
+  @override
+  bool shouldRepaint(_SlotsPainter old) =>
+      old.slots.length != slots.length ||
+      (slots.isNotEmpty && old.slots.first != slots.first);
+}
+
+/// An empty chair: a dark disc with a dashed gold ring and a plus.
+class _EmptySeatPainter extends CustomPainter {
+  const _EmptySeatPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero), r = size.width / 2;
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..shader = const RadialGradient(
+          colors: [Color(0xFF3A1A5A), Color(0xFF14052B)],
+        ).createShader(Rect.fromCircle(center: c, radius: r)),
+    );
+    final ring = Path()..addOval(Rect.fromCircle(center: c, radius: r * .93));
+    for (final m in ring.computeMetrics()) {
+      for (var d = 0.0; d < m.length; d += 22) {
+        canvas.drawPath(
+          m.extractPath(d, math.min(d + 12, m.length)),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = r * .06
+            ..strokeCap = StrokeCap.round
+            ..color = const Color(0xCCFFD45F),
+        );
+      }
+    }
+    final plus = Paint()
+      ..strokeWidth = r * .12
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFFFFD45F);
+    canvas.drawLine(c + Offset(-r * .3, 0), c + Offset(r * .3, 0), plus);
+    canvas.drawLine(c + Offset(0, -r * .3), c + Offset(0, r * .3), plus);
+  }
+
+  @override
+  bool shouldRepaint(_EmptySeatPainter old) => false;
 }

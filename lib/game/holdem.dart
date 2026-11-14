@@ -130,6 +130,9 @@ class Seat {
   List<PlayingCard> hole = [];
   bool inHand = false, folded = false, acted = false;
 
+  /// Standing up, or not yet dealt in: takes no part in the next hand.
+  bool away = false;
+
   /// Chips bet on this street, and in the whole hand.
   int bet = 0, total = 0;
 
@@ -160,6 +163,10 @@ class HandResult {
       winnings.entries.reduce((a, b) => b.value > a.value ? b : a).key;
 }
 
+/// How bold each computer player is, Riya first. They are kept close so
+/// that nobody has a big edge (see `tool/poker_balance.dart`).
+const defaultNerves = [.45, .55, .5, .6];
+
 /// No-limit Texas Hold'em for two to five players.
 class Holdem {
   Holdem({
@@ -169,12 +176,14 @@ class Holdem {
     int players = 5,
     String you = 'You',
     Random? random,
+    List<double> nerves = defaultNerves,
   }) : rng = random ?? Random() {
     const names = ['Riya', 'Arjun', 'Meera', 'Kabir'];
-    const nerves = [.35, .7, .5, .85];
     seats.add(Seat(0, you, yourChips ?? buyIn, bot: false));
     for (var i = 1; i < players.clamp(2, 5); i++) {
-      seats.add(Seat(i, names[i - 1], buyIn, nerve: nerves[i - 1]));
+      seats.add(
+        Seat(i, names[i - 1], buyIn, nerve: nerves[(i - 1) % nerves.length]),
+      );
     }
   }
 
@@ -220,7 +229,7 @@ class Holdem {
         ..bet = 0
         ..total = 0
         ..lastAction = ''
-        ..inHand = s.chips > 0;
+        ..inHand = s.chips > 0 && !s.away;
     }
     board.clear();
     result = null;
@@ -427,6 +436,30 @@ class Holdem {
     result = HandResult(winnings, reveal ? contenders : const [], values);
     playing = false;
     awaitingStreet = false;
+  }
+
+  /// Stands [s] up: they take no part in later hands. In a hand they fold
+  /// (unless already all in, when the hand plays out without them acting).
+  void standUp(Seat s) {
+    final inPlay = playing && s.live && !s.allIn;
+    s.away = true;
+    if (!inPlay) return;
+    if (turn == s.index && !awaitingStreet) {
+      fold(s);
+      return;
+    }
+    // Not their turn: fold out of turn without disturbing whose turn it is.
+    s
+      ..folded = true
+      ..acted = true
+      ..lastAction = 'Fold';
+    if (live.length == 1) _award(reveal: false);
+  }
+
+  /// Sits [s] down with [chips]; they are dealt in from the next hand.
+  void sitDown(Seat s, int chips) {
+    s.chips += chips;
+    s.away = false;
   }
 
   /// Gives a computer player that has run out a fresh stack. Returns who

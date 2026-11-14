@@ -144,7 +144,19 @@ and back to upright when you leave.
   opens a panel with a slider and quick amounts (minimum, half pot, pot,
   all in). A ring round the seat counts down 20 seconds; if yours runs
   out you check, or fold to a bet.
-- The menu button turns sound on or off, or leaves the table.
+- The menu button turns sound on or off, stands you up, or leaves the table.
+- The rivals sit on the rim of the table, the upper and lower ones in a
+  straight line on each side, and their cards fan inward. The five
+  community slots are sunken, dashed and captioned FLOP, TURN and RIVER.
+- Sitting at a table feels like a match in progress: either a hand is
+  already under way and you join the next, or a countdown of at most 20
+  seconds runs before the first deal. Cards fly from the dealer to each
+  seat one by one; the flop comes down one card at a time.
+- Stand up from the menu to watch, and press SIT DOWN to buy in again.
+  Out of chips you stand up automatically and can buy in again.
+- Balance: the computer players' temperaments are tuned so that each seat
+  wins close to its fair share of hands (`dart run tool/poker_balance.dart`
+  simulates this). The deck is never rigged.
 - Every move has its own sound: deal, card, check, call, raise, all in,
   fold, your turn, a tick through your last five seconds, win, lose and
   chips being collected (`assets/sounds/poker*.wav`).

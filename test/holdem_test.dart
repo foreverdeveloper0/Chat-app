@@ -233,4 +233,82 @@ void main() {
     expect(g.rebuyBots(), [g.seats[1]]);
     expect(g.you.chips, 0);
   });
+
+  test('standing up folds you out of a hand and out of the next ones', () {
+    final g = game(players: 3)..deal();
+    var guard = 0;
+    // A first hand, so that you are no longer first to act in the next.
+    while (g.playing) {
+      expect(guard++, lessThan(300));
+      g.awaitingStreet ? g.nextStreet() : g.botTurn();
+    }
+    g.deal();
+    final you = g.you;
+    // Stand up when it is not your turn: you fold, the turn stays put.
+    final turn = g.turn;
+    expect(turn, isNot(0));
+    g.standUp(you);
+    expect(you.folded, isTrue);
+    expect(you.away, isTrue);
+    expect(g.turn, turn);
+    expect(g.playing, isTrue);
+    // The others carry on and finish the hand.
+    guard = 0;
+    while (g.playing) {
+      expect(guard++, lessThan(300));
+      g.awaitingStreet ? g.nextStreet() : g.botTurn();
+    }
+    final chips = g.seats.fold(0, (t, s) => t + s.chips);
+    // Your blind or bet stays in the pot; all the chips are accounted for.
+    expect(chips, 3 * 2000);
+    // The next hand is dealt without you.
+    g.deal();
+    expect(you.inHand, isFalse);
+    expect(you.hole, isEmpty);
+    expect(g.seats.where((s) => s.inHand).length, 2);
+    // Sit down again with chips and you are dealt in.
+    while (g.playing) {
+      g.awaitingStreet ? g.nextStreet() : g.botTurn();
+    }
+    g.sitDown(you, 500);
+    expect(you.away, isFalse);
+    g.deal();
+    expect(you.inHand, isTrue);
+    expect(you.hole.length, 2);
+  });
+
+  test('standing up on your own turn folds properly and the hand goes on', () {
+    final g = game(players: 3);
+    g.deal();
+    while (g.turn != 0 && g.playing) {
+      g.botTurn();
+    }
+    if (g.playing && !g.awaitingStreet) {
+      g.standUp(g.you);
+      expect(g.you.folded, isTrue);
+      expect(g.you.away, isTrue);
+      if (g.playing) expect(g.turn, isNot(0));
+    }
+  });
+
+  test('the last player left when you stand up takes the pot', () {
+    final g = game(players: 2)..deal();
+    final bot = g.seats[1];
+    g.standUp(g.you);
+    expect(g.playing, isFalse);
+    expect(g.result!.winner, bot);
+    expect(g.result!.revealed, isEmpty);
+    expect(g.seats.fold(0, (t, s) => t + s.chips), 4000);
+    // With only one player left there is nobody to deal to.
+    expect(g.deal(), isFalse);
+  });
+
+  test('a short bot stack is topped up but a standing player is not', () {
+    final g = game(players: 3);
+    g.you.away = true;
+    g.you.chips = 0;
+    g.seats[1].chips = 0;
+    expect(g.rebuyBots(), [g.seats[1]]);
+    expect(g.you.chips, 0);
+  });
 }
