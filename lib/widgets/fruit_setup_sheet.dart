@@ -9,19 +9,41 @@ import 'home_sections.dart' show Pressable, hubCard;
 /// Pick a blade and a mode for Fruit Cut.
 Future<void> showFruitSetup(BuildContext context) {
   var blade = Blade.silver;
+  var players = 4;
   final logo = games.firstWhere((g) => g.key == 'fruit').logo;
-  const modes = [
+  // Title, subtitle, mode, icon, computer players, people taking turns.
+  List<(String, String, FruitMode, IconData, int, int)> modes() => [
     (
       'Classic',
-      'Three lives. Don\'t drop fruit, never cut a bomb',
+      'Solo. Three lives, never cut a bomb',
       FruitMode.classic,
       Icons.favorite_rounded,
+      0,
+      1,
     ),
     (
       '60 Seconds',
-      'Cut all you can before time runs out',
+      'Solo. Cut all you can before time runs out',
       FruitMode.timed,
       Icons.timer_rounded,
+      0,
+      1,
+    ),
+    (
+      'Vs Computer',
+      'You against ${players - 1} computer player${players > 2 ? 's' : ''}',
+      FruitMode.versus,
+      Icons.smart_toy_rounded,
+      players - 1,
+      1,
+    ),
+    (
+      'Pass & Play',
+      '$players people take turns on this phone',
+      FruitMode.timed,
+      Icons.people_alt_rounded,
+      0,
+      players,
     ),
   ];
   return showModalBottomSheet<void>(
@@ -123,8 +145,57 @@ Future<void> showFruitSetup(BuildContext context) {
                     ),
                 ],
               ),
-              const SizedBox(height: 12),
-              for (final (title, sub, mode, icon) in modes)
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'PLAYERS',
+                    style: AppText.title.copyWith(
+                      fontSize: 13,
+                      color: const Color(0xFF9EA9DC),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  for (final n in const [2, 3, 4])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        key: ValueKey('players-$n'),
+                        onTap: () => setSheet(() => players = n),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          width: 44,
+                          height: 32,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: n == players
+                                ? const Color(0x33FFC93A)
+                                : AppColors.cardInset,
+                            border: Border.all(
+                              color: n == players
+                                  ? AppColors.goldSoft
+                                  : AppColors.cardBorder,
+                              width: 1.4,
+                            ),
+                          ),
+                          child: Text(
+                            '$n',
+                            style: AppText.title.copyWith(
+                              fontSize: 15,
+                              color: n == players
+                                  ? AppColors.goldSoft
+                                  : AppColors.cream,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              for (final (title, sub, mode, icon, rivals, humans) in modes())
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Pressable(
@@ -133,15 +204,19 @@ Future<void> showFruitSetup(BuildContext context) {
                       Navigator.of(context).push(
                         PageRouteBuilder<void>(
                           transitionDuration: const Duration(milliseconds: 280),
-                          pageBuilder: (_, _, _) =>
-                              FruitScreen(mode: mode, blade: blade),
+                          pageBuilder: (_, _, _) => FruitScreen(
+                            mode: mode,
+                            blade: blade,
+                            rivals: rivals,
+                            humans: humans,
+                          ),
                           transitionsBuilder: (_, a, _, child) =>
                               FadeTransition(opacity: a, child: child),
                         ),
                       );
                     },
                     child: Container(
-                      height: 60,
+                      height: 56,
                       padding: const EdgeInsets.symmetric(horizontal: 14),
                       decoration: hubCard(border: AppColors.goldTrim),
                       child: Row(

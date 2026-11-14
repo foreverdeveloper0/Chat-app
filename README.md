@@ -99,11 +99,17 @@ that tumble apart when cut).
 - Classic: three lives; every fruit that falls uncut costs one, cutting a
   green poison flask costs one, and cutting a bomb ends the game.
 - 60 Seconds: cut as much as you can; a bomb costs 10 points and poison 5.
+- Vs Computer: you and up to three computer players (Ruby, Jade, Amber)
+  cut on the same board for 60 seconds; each has its own blade colour,
+  reacts a little slower or faster, and sometimes hits a bomb. A
+  scoreboard shows everyone, and the results rank all players.
+- Pass & Play: 2 to 4 people take 60-second turns on one phone, then the
+  scores are ranked.
 - One point per fruit; three or more in one swipe is a combo worth extra.
 - A chef's knife follows your finger, leaving a glowing slash in the
   blade's colour (silver, fire or neon). Juice splashes and
-  stains the board, bombs flash and shake the screen, and the best score
-  of the session is kept per mode.
+  stains the board for a few seconds, bombs flash and shake the screen,
+  and the best score of the session is kept per mode.
 
 The other game on the hub (Poker)
 is a placeholder that says "coming soon".

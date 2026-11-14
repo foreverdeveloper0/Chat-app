@@ -172,4 +172,50 @@ void main() {
     expect(missed, 0);
     expect(g.lives, 3);
   });
+
+  test('versus: computer players cut fruit, and are ranked by score', () {
+    final g = FruitGame(mode: FruitMode.versus, rivals: 3, random: Random(4))
+      ..resize(const Size(400, 800))
+      ..started = true;
+    expect(g.players.length, 4);
+    expect(g.players.where((p) => p.bot).length, 3);
+    _run(g, FruitGame.timedLength + 1);
+    expect(g.over, isTrue);
+    expect(g.endedBy, 'time');
+    for (final b in g.players.skip(1)) {
+      expect(b.cut, greaterThan(8), reason: b.name);
+    }
+    final order = g.standings;
+    for (var i = 1; i < order.length; i++) {
+      expect(order[i - 1].score, greaterThanOrEqualTo(order[i].score));
+    }
+    // Nobody but the person playing touches their score.
+    expect(g.you.score, 0);
+  });
+
+  test('a fruit can only be cut once, by whoever gets there first', () {
+    final g = FruitGame(mode: FruitMode.versus, rivals: 1, random: Random(1))
+      ..resize(const Size(400, 800))
+      ..started = true;
+    final f = g.launch(7, x: 200, apex: 300)
+      ..pos = const Offset(200, 400)
+      ..vel = Offset.zero;
+    final bot = g.players[1];
+    expect(
+      g
+          .slice(
+            f.pos - const Offset(60, 0),
+            f.pos + const Offset(60, 0),
+            player: bot,
+          )
+          .cut,
+      1,
+    );
+    expect(
+      g.slice(f.pos - const Offset(60, 0), f.pos + const Offset(60, 0)).cut,
+      0,
+    );
+    expect(bot.score, 1);
+    expect(g.you.score, 0);
+  });
 }

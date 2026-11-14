@@ -57,10 +57,18 @@ class FruitScreen extends StatefulWidget {
     super.key,
     this.mode = FruitMode.classic,
     this.blade = Blade.silver,
+    this.rivals = 0,
+    this.humans = 1,
   });
 
   final FruitMode mode;
   final Blade blade;
+
+  /// Computer players to cut against (versus).
+  final int rivals;
+
+  /// People taking turns on this phone (pass and play), 1 for solo.
+  final int humans;
 
   /// Best scores this session, per mode.
   static final best = <FruitMode, int>{};
@@ -96,8 +104,32 @@ class _FruitScreenState extends State<FruitScreen>
     _ticker.start();
   }
 
+  /// Whose turn it is in pass and play, and the scores so far.
+  int _turn = 0;
+  final _turnScores = <int>[];
+
+  bool get _passPlay => widget.humans > 1;
+  String get _youName => _passPlay ? 'Player ${_turn + 1}' : 'You';
+
+  /// Start again from the first player.
+  void _restart() {
+    _turn = 0;
+    _turnScores.clear();
+    _newGame();
+  }
+
+  void _nextTurn() {
+    _turn++;
+    _newGame();
+  }
+
   void _newGame() {
-    _game = FruitGame(mode: widget.mode);
+    _game = FruitGame(
+      mode: widget.mode,
+      rivals: widget.rivals,
+      you: _youName,
+      yourColour: widget.blade.glow,
+    );
     FruitScreen.debugGame = _game;
     _ready = 1.4;
     _sinceOver = 0;
@@ -131,6 +163,16 @@ class _FruitScreenState extends State<FruitScreen>
       Sounds.play(Sfx.lifeLost);
       HapticFeedback.mediumImpact();
     }
+    // The computer players' cuts and mistakes.
+    if (ev.botCut > 0 && _clock - _lastSlice > .12) {
+      _lastSlice = _clock;
+      Sounds.play(Sfx.slice);
+    }
+    if (ev.bomb) {
+      _shake = math.max(_shake, .6);
+      Sounds.play(Sfx.crash);
+    }
+    if (ev.poison) Sounds.play(Sfx.hit);
     if (ev.over) _gameOver();
     if (_game.over && !_results) {
       _sinceOver += dt;
@@ -144,13 +186,14 @@ class _FruitScreenState extends State<FruitScreen>
 
     // The HUD only rebuilds when something on it changes.
     final key =
-        '${_game.score}|${_game.lives}|${_game.timeLeft.ceil()}|'
-        '${_game.started}|${_ready > .5}';
+        '${_game.players.map((p) => p.score).join(',')}|${_game.lives}|'
+        '${_game.timeLeft.ceil()}|${_game.started}|${_ready > .5}';
     if (key != _hudKey) setState(() => _hudKey = key);
     _frame.value++;
   }
 
   void _gameOver() {
+    if (_passPlay) _turnScores.add(_game.score);
     final best = FruitScreen.best[widget.mode] ?? 0;
     _newBest = _game.score > best;
     if (_newBest) FruitScreen.best[widget.mode] = _game.score;
@@ -274,6 +317,74 @@ class _FruitScreenState extends State<FruitScreen>
   Widget _hud() {
     final g = _game;
     final best = FruitScreen.best[widget.mode] ?? 0;
+    final top = _topBar(g, best);
+    if (g.players.length < 2) return top;
+    // Everyone's score, leader first.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        top,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final (i, p) in g.standings.indexed)
+                Container(
+                  key: ValueKey('chip-${p.name}'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: p.bot
+                        ? const Color(0xAA0E1440)
+                        : const Color(0xDD2A1F7A),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: p.bot ? p.colour : AppColors.goldSoft,
+                      width: 1.4,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (i == 0 && p.score > 0) ...[
+                        const Icon(
+                          Icons.emoji_events_rounded,
+                          size: 14,
+                          color: AppColors.goldSoft,
+                        ),
+                        const SizedBox(width: 3),
+                      ],
+                      Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: p.colour,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        '${p.name}  ${p.score}',
+                        style: _small.copyWith(
+                          color: Colors.white,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _topBar(FruitGame g, int best) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
       child: Row(
@@ -303,7 +414,12 @@ class _FruitScreenState extends State<FruitScreen>
                       key: const ValueKey('score'),
                       style: _big.copyWith(fontSize: 26),
                     ),
-                    Text('BEST ${math.max(best, g.score)}', style: _small),
+                    Text(
+                      _passPlay
+                          ? _youName.toUpperCase()
+                          : 'BEST ${math.max(best, g.score)}',
+                      style: _small,
+                    ),
                   ],
                 ),
               ],
@@ -377,7 +493,7 @@ class _FruitScreenState extends State<FruitScreen>
               _button(
                 'RESTART',
                 const Color(0xFF2E6BE0),
-                () => setState(_newGame),
+                () => setState(_restart),
               ),
               _button(
                 'QUIT',
@@ -393,6 +509,19 @@ class _FruitScreenState extends State<FruitScreen>
 
   Widget _resultCard() {
     final g = _game;
+    if (_passPlay && _turn < widget.humans - 1) return _turnCard();
+    if (_passPlay) {
+      return _rankingCard([
+        for (var i = 0; i < _turnScores.length; i++)
+          ('Player ${i + 1}', AppColors.goldSoft, _turnScores[i], false),
+      ], youWon: null);
+    }
+    if (g.players.length > 1) {
+      final order = g.standings;
+      return _rankingCard([
+        for (final p in order) (p.name, p.colour, p.score, !p.bot),
+      ], youWon: order.first == g.you);
+    }
     final title = switch (g.endedBy) {
       'bomb' => 'BOOM!',
       'poison' => 'POISONED!',
@@ -457,7 +586,160 @@ class _FruitScreenState extends State<FruitScreen>
                   _button(
                     'PLAY AGAIN',
                     const Color(0xFF1FA35C),
-                    () => setState(_newGame),
+                    () => setState(_restart),
+                  ),
+                  _button(
+                    'HOME',
+                    const Color(0xFF2A3A9A),
+                    () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Between turns in pass and play: this player's score, then hand over.
+  Widget _turnCard() {
+    final next = _turn + 2;
+    return Positioned.fill(
+      child: ColoredBox(
+        color: const Color(0xB00A0604),
+        child: Center(
+          child: _card(
+            SizedBox(
+              width: 250,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'TIME UP!',
+                    style: _big.copyWith(
+                      fontSize: 30,
+                      color: const Color(0xFFFFE28A),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(_youName, style: _small.copyWith(fontSize: 14)),
+                  Text('${_game.score}', style: _big.copyWith(fontSize: 52)),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Pass the phone to Player $next',
+                    textAlign: TextAlign.center,
+                    style: _small.copyWith(fontSize: 14, color: Colors.white),
+                  ),
+                  const SizedBox(height: 14),
+                  _button(
+                    'PLAYER $next  START',
+                    const Color(0xFF1FA35C),
+                    () => setState(_nextTurn),
+                  ),
+                  _button(
+                    'QUIT',
+                    const Color(0xFF2A3A9A),
+                    () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Final places: name, colour, score, and whether it is the person
+  /// playing (highlighted).
+  Widget _rankingCard(
+    List<(String, Color, int, bool)> rows, {
+    required bool? youWon,
+  }) {
+    rows = [...rows]..sort((a, b) => b.$3.compareTo(a.$3));
+    final title = switch (youWon) {
+      true => 'YOU WIN!',
+      false => '${rows.first.$1.toUpperCase()} WINS',
+      null => '${rows.first.$1.toUpperCase()} WINS!',
+    };
+    return Positioned.fill(
+      child: ColoredBox(
+        color: const Color(0xB00A0604),
+        child: Center(
+          child: _card(
+            SizedBox(
+              width: 260,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.emoji_events_rounded,
+                    size: 44,
+                    color: AppColors.goldSoft,
+                  ),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: _big.copyWith(
+                      fontSize: 28,
+                      color: const Color(0xFFFFE28A),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  for (final (i, (name, colour, score, you)) in rows.indexed)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: you
+                            ? const Color(0x553A2AA0)
+                            : const Color(0x33000000),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: i == 0
+                              ? AppColors.goldSoft
+                              : const Color(0x33FFFFFF),
+                          width: i == 0 ? 1.8 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            '${i + 1}',
+                            style: _big.copyWith(
+                              fontSize: 18,
+                              color: AppColors.goldSoft,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: colour,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              name,
+                              style: _big.copyWith(fontSize: 16),
+                            ),
+                          ),
+                          Text('$score', style: _big.copyWith(fontSize: 20)),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 10),
+                  _button(
+                    'PLAY AGAIN',
+                    const Color(0xFF1FA35C),
+                    () => setState(_restart),
                   ),
                   _button(
                     'HOME',
@@ -1015,7 +1297,7 @@ class _FruitPainter extends CustomPainter {
   }
 
   /// Smooths the trail with a Catmull-Rom curve through its points.
-  List<(Offset, double)> _smooth() {
+  List<(Offset, double)> _smooth(List<(Offset, double)> trail) {
     if (trail.length < 3) return trail;
     final out = <(Offset, double)>[];
     for (var i = 0; i < trail.length - 1; i++) {
@@ -1038,8 +1320,17 @@ class _FruitPainter extends CustomPainter {
     return out;
   }
 
-  void _blade(Canvas canvas, double t) {
-    final pts = _smooth();
+  /// A tapered ribbon along [pts]: a point at the tail, widest at the
+  /// blade, fading as its points age past [now].
+  void _ribbon(
+    Canvas canvas,
+    List<(Offset, double)> pts,
+    double now,
+    Color glowColour,
+    Color coreColour,
+    double width,
+  ) {
+    final t = now;
     if (pts.length >= 2) {
       // A tapered ribbon: a point at the tail, widest at the blade.
       final left = <Offset>[], right = <Offset>[];
@@ -1051,7 +1342,7 @@ class _FruitPainter extends CustomPainter {
         if (d.distance < .001) d = const Offset(1, 0);
         final n = Offset(-d.dy, d.dx) / d.distance;
         final fresh = (1 - (t - pts[i].$2) / _trailLife).clamp(0.0, 1.0);
-        final w = 9 * math.sqrt(i / (pts.length - 1)) * fresh;
+        final w = width * math.sqrt(i / (pts.length - 1)) * fresh;
         left.add(pts[i].$1 + n * w);
         right.add(pts[i].$1 - n * w);
         outerL.add(pts[i].$1 + n * (w * 2.2));
@@ -1060,9 +1351,9 @@ class _FruitPainter extends CustomPainter {
       final ribbon = Path()..addPolygon([...left, ...right.reversed], true);
       canvas.drawPath(
         Path()..addPolygon([...outerL, ...outerR.reversed], true),
-        Paint()..color = blade.glow.withValues(alpha: .3),
+        Paint()..color = glowColour.withValues(alpha: .3),
       );
-      canvas.drawPath(ribbon, Paint()..color = blade.glow);
+      canvas.drawPath(ribbon, Paint()..color = glowColour);
       final core = Path()
         ..addPolygon([
           for (var i = 0; i < pts.length; i++)
@@ -1070,10 +1361,10 @@ class _FruitPainter extends CustomPainter {
           for (var i = pts.length - 1; i >= 0; i--)
             Offset.lerp(left[i], right[i], .7)!,
         ], true);
-      canvas.drawPath(core, Paint()..color = blade.core);
+      canvas.drawPath(core, Paint()..color = coreColour);
       // Glints scattered along the stroke.
       final rnd = math.Random((t * 24).floor());
-      final glint = Paint()..color = blade.core;
+      final glint = Paint()..color = coreColour;
       for (var i = 0; i < 5; i++) {
         final p = pts[rnd.nextInt(pts.length)];
         final fresh = (1 - (t - p.$2) / _trailLife).clamp(0.0, 1.0);
@@ -1097,6 +1388,16 @@ class _FruitPainter extends CustomPainter {
         );
       }
     }
+  }
+
+  void _blade(Canvas canvas, double t) {
+    // The computer players' blades, in their colours.
+    for (final b in game.players) {
+      if (b.bot) {
+        _ribbon(canvas, _smooth(b.trail), game.time, b.colour, Colors.white, 6);
+      }
+    }
+    _ribbon(canvas, _smooth(trail), t, blade.glow, blade.core, 9);
     final (angle, pop) = knife();
     if (pop > 0 && trail.isNotEmpty) {
       _knife(canvas, trail.last.$1, angle, pop, t);
@@ -1358,13 +1659,15 @@ class _FruitPainter extends CustomPainter {
             fontFamily: AppText.family,
             fontWeight: FontWeight.w700,
             fontSize: p.text == 'BOOM!' ? 44 : (p.big ? 26 : 18),
-            color: p.text.startsWith('POISON')
-                ? const Color(0xFF8CFF4A)
-                : p.text == 'BOOM!'
-                ? const Color(0xFFFF7A1A)
-                : p.text == '✕' || p.text == '-10'
-                ? const Color(0xFFFF4D4D)
-                : const Color(0xFFFFE28A),
+            color:
+                p.colour ??
+                (p.text.startsWith('POISON')
+                    ? const Color(0xFF8CFF4A)
+                    : p.text == 'BOOM!'
+                    ? const Color(0xFFFF7A1A)
+                    : p.text == '✕' || p.text == '-10'
+                    ? const Color(0xFFFF4D4D)
+                    : const Color(0xFFFFE28A)),
             shadows: const [Shadow(color: Color(0xB3000000), blurRadius: 4)],
           ),
         ),

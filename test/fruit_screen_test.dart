@@ -93,4 +93,69 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 2));
   });
+
+  Future<void> open(WidgetTester tester, String mode, {int? players}) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const ElitePlayLudoApp());
+    await tester.pump();
+    final tile = find.byKey(const ValueKey('game-fruit'));
+    await tester.ensureVisible(tile);
+    await tester.pump();
+    await tester.tap(tile);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    if (players != null) {
+      await tester.tap(find.byKey(ValueKey('players-$players')));
+      await tester.pump();
+    }
+    await tester.tap(find.text(mode));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+  }
+
+  Future<void> finish(WidgetTester tester) async {
+    for (var i = 0; i < 50; i++) {
+      await tester.pump(const Duration(milliseconds: 34));
+    }
+    FruitScreen.debugGame!.time = 59.8;
+    for (var i = 0; i < 50; i++) {
+      await tester.pump(const Duration(milliseconds: 34));
+    }
+  }
+
+  testWidgets('Fruit Cut: three computer players, then a ranking', (
+    tester,
+  ) async {
+    await open(tester, 'Vs Computer');
+    final game = FruitScreen.debugGame!;
+    expect(game.players.length, 4);
+    expect(find.byKey(const ValueKey('chip-Ruby')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chip-Amber')), findsOneWidget);
+    await finish(tester);
+    expect(game.over, isTrue);
+    expect(find.textContaining('WIN'), findsOneWidget);
+    expect(find.text('PLAY AGAIN'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('Fruit Cut: pass and play hands the phone over', (tester) async {
+    await open(tester, 'Pass & Play', players: 2);
+    expect(FruitScreen.debugGame!.you.name, 'Player 1');
+    await finish(tester);
+    expect(find.text('PLAYER 2  START'), findsOneWidget);
+    await tester.tap(find.text('PLAYER 2  START'));
+    await tester.pump();
+    expect(FruitScreen.debugGame!.you.name, 'Player 2');
+    await finish(tester);
+    expect(find.textContaining('WINS!'), findsOneWidget);
+    expect(find.text('Player 1'), findsOneWidget);
+    expect(find.text('Player 2'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 2));
+  });
 }
