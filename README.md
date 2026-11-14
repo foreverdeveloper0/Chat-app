@@ -127,7 +127,8 @@ and back to upright when you leave.
   before the flop, on the flop (three cards), the turn and the river.
 - Your profile sits at the bottom with your two cards below it and your
   chips under them; the others' cards peek from the corner of their
-  profiles. A player who folds is stamped FOLD and their cards go.
+  profiles. A player who folds turns grey with FOLD across the profile;
+  their cards go, and yours stay in front of you in grey.
 - On your turn the buttons sit beside your seat: FOLD on the left, CHECK
   or CALL and RAISE on the right. RAISE opens a panel with a slider and
   quick amounts (minimum, half pot, pot, all in). A ring round the seat

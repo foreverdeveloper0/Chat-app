@@ -590,13 +590,14 @@ class _PokerScreenState extends State<PokerScreen>
                 height: radius * 2,
                 child: CustomPaint(
                   painter: _AvatarPainter(
-                    _colours[s.index],
+                    // Out of the hand: the colour drains away.
+                    dim ? const Color(0xFF6E6E80) : _colours[s.index],
                     s.name.characters.first,
                     dim: dim,
                   ),
                 ),
               ),
-              if (s.folded) _foldStamp(radius * .5),
+              if (s.folded) _foldMark(radius),
               // The turn timer runs round the ring.
               if (turn)
                 AnimatedBuilder(
@@ -613,30 +614,38 @@ class _PokerScreenState extends State<PokerScreen>
     ];
   }
 
-  /// A red FOLD stamp, slapped on at a slant.
-  Widget _foldStamp(double height) => TweenAnimationBuilder<double>(
-    tween: Tween(begin: 1.8, end: 1),
-    duration: const Duration(milliseconds: 260),
-    curve: Curves.easeOutBack,
-    builder: (context, scale, child) =>
-        Transform.scale(scale: scale, child: child),
-    child: Transform.rotate(
-      angle: -.22,
-      child: Container(
-        height: height,
-        padding: EdgeInsets.symmetric(horizontal: height * .32),
-        decoration: BoxDecoration(
-          color: const Color(0xE6B3202E),
-          borderRadius: BorderRadius.circular(height * .22),
-          border: Border.all(color: Colors.white, width: 1.6),
-          boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 5)],
-        ),
-        // Only as wide as the word.
+  /// Marks a folded player: the word across the middle of the greyed
+  /// profile, on a dark band.
+  Widget _foldMark(double radius) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: 0, end: 1),
+    duration: const Duration(milliseconds: 220),
+    builder: (context, t, child) => Opacity(opacity: t, child: child),
+    child: ClipOval(
+      child: SizedBox(
+        width: radius * 1.84,
+        height: radius * 1.84,
         child: Center(
-          widthFactor: 1,
-          child: Text(
-            'FOLD',
-            style: _text(height * .56).copyWith(letterSpacing: 1.5),
+          child: Container(
+            width: double.infinity,
+            height: radius * .62,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xE61A1A26), Color(0xE6000000)],
+              ),
+              border: Border.symmetric(
+                horizontal: BorderSide(color: Color(0x88FFFFFF), width: .8),
+              ),
+            ),
+            child: Text(
+              'FOLD',
+              style: _text(
+                radius * .4,
+                const Color(0xFFF2F2F7),
+              ).copyWith(letterSpacing: radius * .08),
+            ),
           ),
         ),
       ),
@@ -737,7 +746,8 @@ class _PokerScreenState extends State<PokerScreen>
           width: 80,
         ),
       // What they last did.
-      if (s.lastAction.isNotEmpty && s.inHand && won == null)
+      // (A folded player's profile already says so.)
+      if (s.lastAction.isNotEmpty && s.inHand && !s.folded && won == null)
         _place(
           at +
               (s.index == 0
@@ -837,9 +847,16 @@ class _PokerScreenState extends State<PokerScreen>
           key: 'c-${g.hands}-0-$i',
           order: i,
           to: at + Offset((i - .5) * cw * .78 - cw / 2, -cw * .7),
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 250),
-            opacity: you.folded ? .35 : 1,
+          // Folded: your cards stay where they are, drained to grey.
+          child: ColorFiltered(
+            colorFilter: you.folded
+                ? const ColorFilter.matrix(<double>[
+                    .18, .36, .06, 0, 0, //
+                    .18, .36, .06, 0, 0, //
+                    .18, .36, .06, 0, 0, //
+                    0, 0, 0, 1, 0,
+                  ])
+                : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
             child: Transform.rotate(
               angle: (i - .5) * .22,
               child: _CardView(card: you.hole[i], faceUp: true, width: cw),
@@ -1712,7 +1729,7 @@ class _AvatarPainter extends CustomPainter {
           colors: [Color(0xFFFFF1B8), Color(0xFFE3B341), Color(0xFF9A6A00)],
         ).createShader(disc),
     );
-    if (dim) canvas.drawCircle(c, r, Paint()..color = const Color(0x99140528));
+    if (dim) canvas.drawCircle(c, r, Paint()..color = const Color(0x55101018));
   }
 
   @override
