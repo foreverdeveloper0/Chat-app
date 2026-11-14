@@ -43,6 +43,22 @@ abstract final class RaceSprites {
   /// Cars seen from above, squashed to look as if seen from behind.
   static const carSquash = .6;
 
+  /// Poses of the turning wheels.
+  static const wheelFrames = 4;
+
+  /// The tyres of the top-view car pictures, as fractions of the picture.
+  static List<Rect> _tyres(double w, double h) => [
+    for (final (l, r) in const [(.02, .155), (.845, .98)])
+      for (final (t, b) in const [(.185, .37), (.66, .89)])
+        Rect.fromLTRB(w * l, h * t, w * r, h * b),
+  ];
+
+  /// Which wheel pose a car shows: the tread moves with the distance it
+  /// has covered, so it spins faster the faster it goes and runs
+  /// backwards in reverse.
+  static String car(Racer r) =>
+      'car${r.colour % 4}.${(r.z / 330).floor() % wheelFrames}';
+
   static ui.Image? sheet;
   static final _sprites = <String, _Sprite>{};
   static Future<void>? _loading;
@@ -99,23 +115,54 @@ abstract final class RaceSprites {
         paste(n, img, flip: true);
       }
     }
+    // Each car in [wheelFrames] poses, its tyre tread moved on a step
+    // each time, so the wheels turn as it drives.
     for (var i = 0; i < 4; i++) {
       final img = images['car$i'];
       if (img == null) continue;
-      final size = Size(
-        img.width.toDouble(),
-        (img.height * carSquash).roundToDouble(),
-      );
-      items.add((
-        'car$i',
-        size,
-        (c, r) => c.drawImageRect(
-          img,
-          Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
-          r,
-          Paint()..filterQuality = FilterQuality.high,
-        ),
-      ));
+      final iw = img.width.toDouble(), ih = img.height.toDouble();
+      final size = Size(iw, (ih * carSquash).roundToDouble());
+      for (var f = 0; f < wheelFrames; f++) {
+        items.add((
+          'car$i.$f',
+          size,
+          (c, r) {
+            c.save();
+            c.translate(r.left, r.top);
+            c.scale(r.width / iw, r.height / ih);
+            c.drawImage(
+              img,
+              Offset.zero,
+              Paint()..filterQuality = FilterQuality.high,
+            );
+            for (final t in _tyres(iw, ih)) {
+              c.save();
+              c.clipRRect(
+                RRect.fromRectAndRadius(t, Radius.circular(t.width * .3)),
+              );
+              const period = 18.0;
+              final shift = period * f / wheelFrames;
+              for (var y = t.top - period + shift; y < t.bottom; y += period) {
+                c.drawRect(
+                  Rect.fromLTWH(t.left, y, t.width, period * .38),
+                  Paint()..color = const Color(0xB0101014),
+                );
+                c.drawRect(
+                  Rect.fromLTWH(
+                    t.left,
+                    y + period * .38,
+                    t.width,
+                    period * .12,
+                  ),
+                  Paint()..color = const Color(0x40FFFFFF),
+                );
+              }
+              c.restore();
+            }
+            c.restore();
+          },
+        ));
+      }
     }
     // The warning sign stands on a pole.
     if (images['warn'] case final img?) {
@@ -484,7 +531,7 @@ class RaceScenePainter extends CustomPainter {
           _add(sprite, scale, 0, sx, sy, alpha, v.clip);
         }
         for (final r in here ?? const <Racer>[]) {
-          final sprite = RaceSprites._of('car${r.colour % 4}');
+          final sprite = RaceSprites._of(RaceSprites.car(r));
           if (sprite == null) continue;
           final pct = (r.z % RaceGame.segLen) / RaceGame.segLen;
           final sc = v.p1.$4 + (v.p2.$4 - v.p1.$4) * pct;
@@ -544,7 +591,7 @@ class RaceScenePainter extends CustomPainter {
     double t,
   ) {
     final p = game.player;
-    final sprite = RaceSprites._of('car${p.colour % 4}');
+    final sprite = RaceSprites._of(RaceSprites.car(p));
     if (sheet == null || sprite == null) return;
     final height = width * sprite.src.height / sprite.src.width;
     canvas.save();
