@@ -98,10 +98,12 @@ void main() {
     await untilMyTurn();
     if (game.hands == hand && game.raiseRange(you) != null) {
       final to = game.raiseRange(you)!.min;
+      // RAISE opens the panel; confirm makes the smallest raise.
+      await tester.tap(find.textContaining(RegExp(r'^(BET|RAISE)$')));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byKey(const ValueKey('raise-panel')), findsOneWidget);
       expect(find.byKey(const ValueKey('raise-to')), findsOneWidget);
-      await tester.tap(
-        find.textContaining(RegExp('^(BET|RAISE|ALL IN) ')).last,
-      );
+      await tester.tap(find.byKey(const ValueKey('raise-confirm')));
       await tester.pump(const Duration(milliseconds: 100));
       expect(you.bet, to);
       await untilMyTurn();

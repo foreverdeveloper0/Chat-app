@@ -125,8 +125,10 @@ and back to upright when you leave.
 - The dealer button moves round each hand; the two seats after it post
   the small and big blind. Everyone gets two cards, then betting rounds
   before the flop, on the flop (three cards), the turn and the river.
-- On your turn: FOLD, CHECK or CALL, or BET / RAISE. The raise amount
-  steps by a big blind, or jumps to half pot, pot or all in.
+- On your turn the buttons sit beside your seat: FOLD on the left, CHECK
+  or CALL and RAISE on the right. RAISE opens a panel with a slider and
+  quick amounts (minimum, half pot, pot, all in). A ring round the seat
+  counts down 20 seconds; if yours runs out you check, or fold to a bet.
 - The best five cards from your two and the five on the table win:
   straight flush, four of a kind, full house, flush, straight, three of
   a kind, two pair, pair, high card. Ties split the pot, and a player
