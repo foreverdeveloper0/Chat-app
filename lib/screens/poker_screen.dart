@@ -884,53 +884,94 @@ class _PokerScreenState extends State<PokerScreen>
     );
   }
 
-  /// The pot: a stack of chips on a wide gold-rimmed plate.
+  /// The pot: a heap of chips beside the total, on a gold-rimmed plate
+  /// with a glow behind it.
   Widget _potLabel(Holdem g) => _place(
     _potAt,
     Container(
-      padding: const EdgeInsets.all(1.8),
+      padding: EdgeInsets.all(3 * _k),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFFFFF1B8), Color(0xFFE3B341), Color(0xFF9A6A00)],
+          colors: [Color(0xFFFFF6C8), Color(0xFFE3B341), Color(0xFF7A5200)],
         ),
-        borderRadius: BorderRadius.circular(40 * _k),
-        boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 8)],
+        borderRadius: BorderRadius.circular(48 * _k),
+        boxShadow: const [
+          BoxShadow(color: Color(0x66FFD45A), blurRadius: 22, spreadRadius: 1),
+          BoxShadow(color: Color(0xAA000000), blurRadius: 8),
+        ],
       ),
       child: Container(
-        height: 62 * _k,
-        padding: EdgeInsets.fromLTRB(14 * _k, 0, 34 * _k, 0),
+        padding: EdgeInsets.all(3 * _k),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1C1326), Color(0xFF07040C)],
-          ),
-          borderRadius: BorderRadius.circular(38 * _k),
+          color: const Color(0xFF07040C),
+          borderRadius: BorderRadius.circular(45 * _k),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ChipStack(
-              amount: math.max(g.pot, g.bigBlind * 4),
-              bigBlind: g.bigBlind,
-              size: 44 * _k,
-              columns: 1,
+        child: Container(
+          height: 84 * _k,
+          padding: EdgeInsets.fromLTRB(22 * _k, 0, 40 * _k, 0),
+          decoration: BoxDecoration(
+            gradient: const RadialGradient(
+              center: Alignment(-.5, -.6),
+              radius: 1.6,
+              colors: [Color(0xFF3B2160), Color(0xFF1A0C2E), Color(0xFF07040C)],
             ),
-            SizedBox(width: 16 * _k),
-            Text('POT', style: _text(26 * _k)),
-            SizedBox(width: 14 * _k),
-            Text(
-              formatCoins(_cleared ? 0 : g.pot),
-              key: const ValueKey('pot'),
-              style: _text(34 * _k, const Color(0xFFFFE28A)),
-            ),
-          ],
+            borderRadius: BorderRadius.circular(42 * _k),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ChipStack(
+                amount: math.max(g.pot, g.bigBlind * 4),
+                bigBlind: g.bigBlind,
+                size: 52 * _k,
+                columns: 3,
+              ),
+              SizedBox(width: 22 * _k),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'TOTAL POT',
+                    style: _text(
+                      19 * _k,
+                      const Color(0xFFD9C3FF),
+                    ).copyWith(letterSpacing: 3 * _k),
+                  ),
+                  Container(
+                    width: 150 * _k,
+                    height: 1.5,
+                    margin: EdgeInsets.symmetric(vertical: 2 * _k),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Color(0x00FFD45A),
+                          Color(0xFFFFD45A),
+                          Color(0x00FFD45A),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Text(
+                    formatCoins(_cleared ? 0 : g.pot),
+                    key: const ValueKey('pot'),
+                    style: _text(42 * _k, const Color(0xFFFFE28A)).copyWith(
+                      shadows: const [
+                        Shadow(color: Color(0xAA000000), blurRadius: 4),
+                        Shadow(color: Color(0x66FFB300), blurRadius: 12),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     ),
-    width: 600,
+    width: 640,
   );
 
   /// The five community cards, each exactly on its place. They fly out
@@ -978,7 +1019,7 @@ class _PokerScreenState extends State<PokerScreen>
   /// its right; beside yours.
   Offset _plateAt(Seat s) =>
       _spot(s.index) +
-      (s.index == 0 ? const Offset(0, 160) : const Offset(0, 152)) * _k;
+      (s.index == 0 ? const Offset(0, 160) : const Offset(0, 122)) * _k;
 
   /// Which way the middle of the table lies from a seat: 1 for the left
   /// side, -1 for the right.
@@ -1202,25 +1243,29 @@ class _PokerScreenState extends State<PokerScreen>
         width: 500,
       ),
       // The name, on its own tag over the top of the picture.
-      _place(
-        at + Offset(0, -radius - 4 * _k),
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: 16 * _k, vertical: 3 * _k),
-          decoration: BoxDecoration(
-            color: const Color(0xF0170722),
-            borderRadius: BorderRadius.circular(20 * _k),
-            border: Border.all(
-              color: turn ? Colors.white : const Color(0xAAFFD45F),
-              width: 1,
+      if (!(me && _standing))
+        _place(
+          at + Offset(0, -radius - 4 * _k),
+          Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: 16 * _k,
+              vertical: 3 * _k,
+            ),
+            decoration: BoxDecoration(
+              color: const Color(0xF0170722),
+              borderRadius: BorderRadius.circular(20 * _k),
+              border: Border.all(
+                color: turn ? Colors.white : const Color(0xAAFFD45F),
+                width: 1,
+              ),
+            ),
+            child: Text(
+              shortName(s.name, 9),
+              style: _text(24 * _k, Colors.white, FontWeight.w600),
             ),
           ),
-          child: Text(
-            shortName(s.name, 9),
-            style: _text(24 * _k, Colors.white, FontWeight.w600),
-          ),
+          width: 200,
         ),
-        width: 200,
-      ),
       // Dealer button, at the avatar's lower right.
       if (g.dealer == s.index && !(me && _standing))
         _place(
@@ -1247,11 +1292,11 @@ class _PokerScreenState extends State<PokerScreen>
         ),
       if (badge != null)
         _place(
-          // Under the picture, just above the chips; yours sits beside
-          // your picture, since your cards are under it.
+          // Rivals: straight above the picture and its name tag; yours
+          // sits beside your picture, since your cards are under it.
           me
               ? at + Offset(radius + 104 * _k, radius * .1)
-              : at + Offset(0, radius + 22 * _k),
+              : at + Offset(0, -radius - 46 * _k),
           badge,
           width: 240,
         ),
@@ -1266,24 +1311,16 @@ class _PokerScreenState extends State<PokerScreen>
     String top, bottom = '';
     var fill = const Color(0xFF14101C), edge = const Color(0xFFFFD45F);
     final won = r?.winnings[s];
-    if (s.index == 0 && s.away && !_standing && g.playing) {
-      // Sat down in the middle of a hand: wait for the next one.
-      top = 'Next hand';
-      edge = const Color(0xFF8FA2FF);
-    } else if (!s.inHand) {
+    if (!s.inHand) {
       return null;
     } else if (s.folded) {
       // A folded player's picture already says so.
       return null;
-    } else if (r != null && r.revealed.contains(s)) {
-      top = r.values[s]!.rank.label;
-      if (won != null) bottom = '+${formatCoins(won)}';
     } else if (won != null) {
       top = 'Win';
       bottom = '+${formatCoins(won)}';
-    } else if (s.index == 0 && g.board.length >= 3 && s.bet == 0) {
-      // Between bets, yours shows what you hold so far.
-      top = evaluate([...s.hole, ...g.board]).rank.label;
+    } else if (r != null) {
+      return null;
     } else {
       final a = s.lastAction;
       if (a.isEmpty || !g.playing) return null;
@@ -1440,7 +1477,6 @@ class _PokerScreenState extends State<PokerScreen>
     final won = r.winnings.containsKey(g.you);
     final w = r.winner;
     final split = r.winnings.length > 1;
-    final hand = r.values[w]?.rank.label;
     return _place(
       _at(935, 292),
       TweenAnimationBuilder<double>(
@@ -1474,10 +1510,6 @@ class _PokerScreenState extends State<PokerScreen>
                     : '${w.name} wins  +${formatCoins(r.winnings[w]!)}',
                 key: const ValueKey('result'),
                 style: _text(15, const Color(0xFFFFE28A)),
-              ),
-              Text(
-                hand ?? 'Everyone else folded',
-                style: _text(10.5, Colors.white, FontWeight.w500),
               ),
             ],
           ),

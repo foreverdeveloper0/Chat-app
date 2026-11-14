@@ -134,7 +134,7 @@ and back to upright when you leave.
 - Each profile has the name on a tag above the picture and the chips on
   a plate below it. Between them a small smoked-glass pill says what the
   player did and for how much (small blind, big blind, check, call, bet,
-  raise, all in, and the hand shown at the end). A player who folds turns
+  raise, all in, A player who folds turns
   grey with FOLD across the picture. Nothing is written on the felt.
 - The others' cards sit behind the corner of their profile. Your picture,
   the same size as theirs, is in the middle at the bottom with your cards
