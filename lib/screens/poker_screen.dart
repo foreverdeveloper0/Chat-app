@@ -45,7 +45,7 @@ class PokerScreen extends StatefulWidget {
 /// coordinates. Seat centres: you at the bottom, then clockwise.
 const _art = Size(1870, 841);
 const _seatSpots = [
-  Offset(935, 640),
+  Offset(935, 656),
   Offset(178, 548),
   Offset(270, 226),
   Offset(1440, 226),
@@ -53,12 +53,12 @@ const _seatSpots = [
 ];
 
 /// Sizes, in the picture's coordinates.
-const _avatar = 86.0, _myAvatar = 56.0;
-const _plate = Size(270, 56), _myPlate = Size(290, 56);
+const _avatar = 86.0, _myAvatar = 86.0;
+const _plate = Size(262, 52), _myPlate = Size(290, 54);
 
 /// Community cards: their width, and where the middle one sits.
-const _boardCard = 122.0, _boardGap = 146.0;
-const _boardAt = Offset(935, 468);
+const _boardCard = 112.0, _boardGap = 134.0;
+const _boardAt = Offset(935, 452);
 
 /// A little air under the table.
 const _bar = 6.0;
@@ -671,7 +671,7 @@ class _PokerScreenState extends State<PokerScreen>
   /// its right; beside yours.
   Offset _plateAt(Seat s) =>
       _spot(s.index) +
-      (s.index == 0 ? const Offset(0, 162) : const Offset(40, 102)) * _k;
+      (s.index == 0 ? const Offset(0, 160) : const Offset(0, 152)) * _k;
 
   /// The back of a seat: a computer player's two cards behind the upper
   /// right of the avatar, then the avatar with its turn ring.
@@ -749,6 +749,7 @@ class _PokerScreenState extends State<PokerScreen>
                   ),
                 ),
               ),
+              if (s.folded) _foldMark(radius),
               // The turn timer runs round the ring.
               if (turn)
                 AnimatedBuilder(
@@ -764,6 +765,44 @@ class _PokerScreenState extends State<PokerScreen>
       ),
     ];
   }
+
+  /// Marks a folded player: the word across the middle of the greyed
+  /// profile, on a dark band.
+  Widget _foldMark(double radius) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: 0, end: 1),
+    duration: const Duration(milliseconds: 220),
+    builder: (context, t, child) => Opacity(opacity: t, child: child),
+    child: ClipOval(
+      child: SizedBox(
+        width: radius * 1.84,
+        height: radius * 1.84,
+        child: Center(
+          child: Container(
+            width: double.infinity,
+            height: radius * .62,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xE61A1A26), Color(0xE6000000)],
+              ),
+              border: Border.symmetric(
+                horizontal: BorderSide(color: Color(0x88FFFFFF), width: .8),
+              ),
+            ),
+            child: Text(
+              'FOLD',
+              style: _text(
+                radius * .4,
+                const Color(0xFFF2F2F7),
+              ).copyWith(letterSpacing: radius * .08),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 
   /// The front of a seat, drawn over the cards: the name plate (name on
   /// the left, chips on the right), the dealer button, and the badge that
@@ -787,7 +826,8 @@ class _PokerScreenState extends State<PokerScreen>
             gradient: const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFF3D1763), Color(0xFF1B0930)],
+              colors: [Color(0xFF5A2590), Color(0xFF2A0F4A), Color(0xFF160726)],
+              stops: [0, .5, 1],
             ),
             borderRadius: BorderRadius.circular(plate.height / 2),
             border: Border.all(
@@ -863,10 +903,11 @@ class _PokerScreenState extends State<PokerScreen>
         ),
       if (badge != null)
         _place(
-          // On the avatar's right shoulder; yours sits past your plate.
+          // Under the picture, just above the chips; yours sits beside
+          // your picture, since your cards are under it.
           me
-              ? at + Offset(radius + 110 * _k, -radius * .1)
-              : at + Offset(160 * _k, 34 * _k),
+              ? at + Offset(radius + 104 * _k, radius * .1)
+              : at + Offset(0, radius + 22 * _k),
           badge,
           width: 240,
         ),
@@ -881,10 +922,9 @@ class _PokerScreenState extends State<PokerScreen>
     String top, bottom = '';
     var fill = const Color(0xFF14101C), edge = const Color(0xFFFFD45F);
     final won = r?.winnings[s];
-    if (s.folded) {
-      top = 'Fold';
-      edge = const Color(0xFF8A8A9A);
-    } else if (r != null && r.revealed.contains(s)) {
+    // A folded player's picture already says so.
+    if (s.folded) return null;
+    if (r != null && r.revealed.contains(s)) {
       top = r.values[s]!.rank.label;
       if (won != null) bottom = '+${formatCoins(won)}';
     } else if (won != null) {
@@ -921,27 +961,33 @@ class _PokerScreenState extends State<PokerScreen>
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutBack,
       builder: (context, t, child) => Transform.scale(scale: t, child: child),
+      // A small pill of smoked glass, tinted by the move.
       child: Container(
         key: ValueKey('action-${s.index}'),
-        padding: EdgeInsets.symmetric(horizontal: 18 * _k, vertical: 5 * _k),
+        padding: EdgeInsets.symmetric(horizontal: 14 * _k, vertical: 3 * _k),
         decoration: BoxDecoration(
-          color: fill,
-          borderRadius: BorderRadius.circular(26 * _k),
-          border: Border.all(color: edge, width: 1.2),
-          boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 4)],
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.lerp(fill, Colors.white, .28)!.withValues(alpha: .72),
+              fill.withValues(alpha: .72),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20 * _k),
+          border: Border.all(color: edge.withValues(alpha: .75), width: .9),
         ),
-        child: Column(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              top,
-              style: _text(
-                (bottom.isEmpty ? 24 : 19) * _k,
-                Colors.white,
-                bottom.isEmpty ? FontWeight.w700 : FontWeight.w500,
+            Text(top, style: _text(20 * _k, Colors.white, FontWeight.w600)),
+            if (bottom.isNotEmpty) ...[
+              SizedBox(width: 9 * _k),
+              Text(
+                bottom.replaceAll(' Crore', ' Cr'),
+                style: _text(20 * _k, const Color(0xFFFFE9A8)),
               ),
-            ),
-            if (bottom.isNotEmpty) Text(bottom, style: _text(25 * _k)),
+            ],
           ],
         ),
       ),
@@ -960,7 +1006,7 @@ class _PokerScreenState extends State<PokerScreen>
     final cw = 100 * _k;
     // Their lower edge tucks a little behind the plate.
     // Centred under your picture, their lower edge behind the chips.
-    final bottom = _plateAt(you) + Offset(0, 6 * _k);
+    final bottom = _plateAt(you) + Offset(0, 14 * _k);
     return [
       for (var i = 0; i < 2; i++)
         _dealt(
@@ -1075,9 +1121,11 @@ class _PokerScreenState extends State<PokerScreen>
     // the same line: FOLD on the left, CHECK / CALL and RAISE on the right.
     final plate = _plateAt(you);
     final bw = 226 * _k, bh = (104 * _k).clamp(36.0, 50.0), gap = 12 * _k;
-    final top = plate.dy - bh / 2;
+    final top = math.min(plate.dy - bh / 2, size.height - bh - 4);
     final leftEdge = plate.dx - _myPlate.width / 2 * _k - gap;
     final rightEdge = plate.dx + _myPlate.width / 2 * _k + gap;
+    // Only while it is your turn.
+    if (!mine) return const SizedBox.shrink();
     return Stack(
       children: [
         Positioned(

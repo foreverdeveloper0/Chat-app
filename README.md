@@ -131,19 +131,19 @@ and back to upright when you leave.
 - The dealer button moves round each hand; the two seats after it post
   the small and big blind. Everyone gets two cards, then betting rounds
   before the flop, on the flop (three cards), the turn and the river.
-- Each profile has the name on a tag above the picture, the chips on a
-  plate below it, and a badge on its shoulder saying what the player did and for how
-  much: small blind, big blind, check, call, bet, raise, all in, fold,
-  and the hand shown at the end. Nothing is written on the felt.
-- The others' cards sit behind the corner of their profile. Your picture is
-  in the middle at the bottom with your cards centred under it and your
-  chips below; yours stand
-  above your name plate, at the bottom of the table.
-- Your profile is in the middle at the bottom with the buttons either
-  side of it: FOLD on the left, CHECK or CALL and RAISE on the right.
-  RAISE opens a panel with a slider and quick amounts (minimum, half pot,
-  pot, all in). A ring round the seat counts down 20 seconds; if yours
-  runs out you check, or fold to a bet.
+- Each profile has the name on a tag above the picture and the chips on
+  a plate below it. Between them a small smoked-glass pill says what the
+  player did and for how much (small blind, big blind, check, call, bet,
+  raise, all in, and the hand shown at the end). A player who folds turns
+  grey with FOLD across the picture. Nothing is written on the felt.
+- The others' cards sit behind the corner of their profile. Your picture,
+  the same size as theirs, is in the middle at the bottom with your cards
+  centred under it and your chips below.
+- On your turn, and only then, the buttons appear either side of your
+  chips: FOLD on the left, CHECK or CALL and RAISE on the right. RAISE
+  opens a panel with a slider and quick amounts (minimum, half pot, pot,
+  all in). A ring round the seat counts down 20 seconds; if yours runs
+  out you check, or fold to a bet.
 - The menu button turns sound on or off, or leaves the table.
 - Every move has its own sound: deal, card, check, call, raise, all in,
   fold, your turn, a tick through your last five seconds, win, lose and
