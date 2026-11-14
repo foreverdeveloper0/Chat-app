@@ -85,6 +85,7 @@ class _FruitScreenState extends State<FruitScreen>
   /// Recent blade positions and when they were made.
   final _trail = <(Offset, double)>[];
   int? _pointer;
+  double _knifeAngle = -math.pi / 4, _knifePop = 0;
   String _hudKey = '';
 
   @override
@@ -137,6 +138,9 @@ class _FruitScreenState extends State<FruitScreen>
       if (_sinceOver > wait) setState(() => _results = true);
     }
     _trail.removeWhere((p) => _clock - p.$2 > _trailLife);
+    _knifePop = _pointer == null
+        ? math.max(0, _knifePop - dt * 6)
+        : math.min(1, _knifePop + dt * 9);
 
     // The HUD only rebuilds when something on it changes.
     final key =
@@ -168,6 +172,19 @@ class _FruitScreenState extends State<FruitScreen>
     final from = _trail.isEmpty ? e.localPosition : _trail.last.$1;
     final to = e.localPosition;
     _trail.add((to, _clock));
+    // The knife turns smoothly to follow the stroke.
+    final d = to - from;
+    if (d.distance > 2) {
+      var target = math.atan2(d.dy, d.dx);
+      var diff = target - _knifeAngle;
+      while (diff > math.pi) {
+        diff -= math.pi * 2;
+      }
+      while (diff < -math.pi) {
+        diff += math.pi * 2;
+      }
+      _knifeAngle += diff * .45;
+    }
     final ev = _game.slice(from, to);
     if (ev.cut > 0) {
       if (_clock - _lastSlice > .05) Sounds.play(Sfx.slice);
@@ -177,6 +194,12 @@ class _FruitScreenState extends State<FruitScreen>
     if (ev.bomb) {
       _shake = 1;
       Sounds.play(Sfx.crash);
+      HapticFeedback.heavyImpact();
+      if (_game.over) _gameOver();
+    }
+    if (ev.poison) {
+      _shake = math.max(_shake, .5);
+      Sounds.play(Sfx.lifeLost);
       HapticFeedback.heavyImpact();
       if (_game.over) _gameOver();
     }
@@ -229,6 +252,7 @@ class _FruitScreenState extends State<FruitScreen>
                       clock: () => _clock,
                       shake: () => _shake,
                       touching: () => _pointer != null,
+                      knife: () => (_knifeAngle, _knifePop),
                       repaint: _frame,
                     ),
                   ),
@@ -370,6 +394,7 @@ class _FruitScreenState extends State<FruitScreen>
     final g = _game;
     final title = switch (g.endedBy) {
       'bomb' => 'BOOM!',
+      'poison' => 'POISONED!',
       'time' => 'TIME UP!',
       _ => 'GAME OVER',
     };
@@ -651,6 +676,7 @@ class _FruitPainter extends CustomPainter {
     required this.clock,
     required this.shake,
     required this.touching,
+    required this.knife,
     required Listenable repaint,
   }) : super(repaint: repaint);
 
@@ -659,6 +685,9 @@ class _FruitPainter extends CustomPainter {
   final Blade blade;
   final double Function() clock, shake;
   final bool Function() touching;
+
+  /// The knife's heading and how far it has popped in (0..1).
+  final (double, double) Function() knife;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -697,18 +726,20 @@ class _FruitPainter extends CustomPainter {
     }
     for (final hf in g.halves) {
       final img = FruitImages.of(hf.kind, hf.right ? 'r' : 'l');
-      _image(canvas, img, hf.pos, hf.size * .95, hf.angle, null);
+      _image(canvas, img, hf.pos, hf.size, hf.angle, null);
     }
     for (final f in g.flyers) {
       if (f.bomb) {
         _bomb(canvas, f, t);
+      } else if (f.poison) {
+        _poison(canvas, f, t);
       } else {
         final img = FruitImages.of(f.kind, 'w');
         _image(
           canvas,
           img,
           f.pos,
-          f.radius * 2.15,
+          f.radius * 2.3,
           f.angle,
           fruitKinds[f.kind].$2,
         );
@@ -719,11 +750,20 @@ class _FruitPainter extends CustomPainter {
       drop.color = d.colour.withValues(alpha: 1 - d.age / d.life);
       canvas.drawCircle(d.pos, d.size * (1 - d.age / d.life * .5), drop);
     }
+    _slashes(canvas);
     _blade(canvas, t);
     for (final p in g.popups) {
       _popup(canvas, p, size.width);
     }
     canvas.restore();
+    // A sickly green wash when poison is cut.
+    if (g.sincePoison < .7) {
+      final k = 1 - g.sincePoison / .7;
+      canvas.drawRect(
+        Offset.zero & size,
+        Paint()..color = Color.fromRGBO(70, 220, 40, .35 * k),
+      );
+    }
     // The flash of a bomb going off.
     if (g.sinceBomb < .6) {
       final k = 1 - g.sinceBomb / .6;
@@ -847,78 +887,344 @@ class _FruitPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _blade(Canvas canvas, double t) {
-    if (trail.length >= 2) {
-      final glow = Paint()..strokeCap = StrokeCap.round;
-      final core = Paint()..strokeCap = StrokeCap.round;
-      for (var i = 1; i < trail.length; i++) {
-        final (a, ta) = trail[i - 1];
-        final (b, _) = trail[i];
-        final fresh = (1 - (t - ta) / _trailLife).clamp(0.0, 1.0);
-        final k = (i / trail.length) * fresh;
-        glow
-          ..strokeWidth = 4 + 18 * k
-          ..color = blade.glow.withValues(alpha: .35 * fresh);
-        core
-          ..strokeWidth = 2 + 7 * k
-          ..color = blade.core.withValues(alpha: fresh);
-        canvas.drawLine(a, b, glow);
-        canvas.drawLine(a, b, core);
+  /// Smooths the trail with a Catmull-Rom curve through its points.
+  List<(Offset, double)> _smooth() {
+    if (trail.length < 3) return trail;
+    final out = <(Offset, double)>[];
+    for (var i = 0; i < trail.length - 1; i++) {
+      final p0 = trail[math.max(0, i - 1)].$1, p1 = trail[i].$1;
+      final p2 = trail[i + 1].$1,
+          p3 = trail[math.min(trail.length - 1, i + 2)].$1;
+      final t1 = trail[i].$2, t2 = trail[i + 1].$2;
+      for (var k = 0; k < 4; k++) {
+        final u = k / 4, u2 = u * u, u3 = u2 * u;
+        final p =
+            (p1 * 2 +
+                (p2 - p0) * u +
+                (p0 * 2 - p1 * 5 + p2 * 4 - p3) * u2 +
+                (p1 * 3 - p0 - p2 * 3 + p3) * u3) *
+            .5;
+        out.add((p, t1 + (t2 - t1) * u));
       }
     }
-    // The knife itself at the fingertip, pointing along the stroke.
-    if (touching() && trail.isNotEmpty) {
-      final tip = trail.last.$1;
-      var dir = const Offset(1, -1);
-      if (trail.length >= 2) {
-        final d = tip - trail[trail.length - 2].$1;
-        if (d.distance > 1) dir = d;
+    out.add(trail.last);
+    return out;
+  }
+
+  void _blade(Canvas canvas, double t) {
+    final pts = _smooth();
+    if (pts.length >= 2) {
+      // A tapered ribbon: a point at the tail, widest at the blade.
+      final left = <Offset>[], right = <Offset>[];
+      for (var i = 0; i < pts.length; i++) {
+        final a = pts[math.max(0, i - 1)].$1,
+            b = pts[math.min(pts.length - 1, i + 1)].$1;
+        var d = b - a;
+        if (d.distance < .001) d = const Offset(1, 0);
+        final n = Offset(-d.dy, d.dx) / d.distance;
+        final fresh = (1 - (t - pts[i].$2) / _trailLife).clamp(0.0, 1.0);
+        final w = 9 * math.sqrt(i / (pts.length - 1)) * fresh;
+        left.add(pts[i].$1 + n * w);
+        right.add(pts[i].$1 - n * w);
       }
-      final ang = math.atan2(dir.dy, dir.dx);
-      canvas.save();
-      canvas.translate(tip.dx, tip.dy);
-      canvas.rotate(ang);
-      canvas.scale(1.6);
-      // Blade (pointing forward) and handle behind.
-      final bladePath = Path()
-        ..moveTo(16, 0)
-        ..lineTo(-22, -7)
-        ..lineTo(-26, -7)
-        ..lineTo(-26, 4)
-        ..lineTo(-22, 4)
-        ..close();
+      final ribbon = Path()..addPolygon([...left, ...right.reversed], true);
       canvas.drawPath(
-        bladePath,
+        ribbon,
         Paint()
-          ..shader = const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFFFFFFF), Color(0xFFB8C2D0), Color(0xFF6E7888)],
-          ).createShader(const Rect.fromLTRB(-26, -7, 16, 4)),
+          ..color = blade.glow.withValues(alpha: .75)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
       );
-      canvas.drawPath(
-        bladePath,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1
-          ..color = blade.glow,
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          const Rect.fromLTRB(-50, -5, -26, 5),
-          const Radius.circular(4),
-        ),
-        Paint()..color = const Color(0xFF5A2E12),
-      );
-      for (final x in [-44.0, -36.0]) {
-        canvas.drawCircle(
-          Offset(x, 0),
-          1.6,
-          Paint()..color = const Color(0xFFE3B341),
+      canvas.drawPath(ribbon, Paint()..color = blade.glow);
+      final core = Path()
+        ..addPolygon([
+          for (var i = 0; i < pts.length; i++)
+            Offset.lerp(left[i], right[i], .3)!,
+          for (var i = pts.length - 1; i >= 0; i--)
+            Offset.lerp(left[i], right[i], .7)!,
+        ], true);
+      canvas.drawPath(core, Paint()..color = blade.core);
+      // Glints scattered along the stroke.
+      final rnd = math.Random((t * 24).floor());
+      final glint = Paint()..color = blade.core;
+      for (var i = 0; i < 5; i++) {
+        final p = pts[rnd.nextInt(pts.length)];
+        final fresh = (1 - (t - p.$2) / _trailLife).clamp(0.0, 1.0);
+        if (fresh < .2) continue;
+        final c =
+            p.$1 + Offset(rnd.nextDouble() - .5, rnd.nextDouble() - .5) * 26;
+        final r = 2 + rnd.nextDouble() * 4 * fresh;
+        canvas.drawPath(
+          Path()
+            ..moveTo(c.dx, c.dy - r * 2)
+            ..lineTo(c.dx + r * .45, c.dy)
+            ..lineTo(c.dx, c.dy + r * 2)
+            ..lineTo(c.dx - r * .45, c.dy)
+            ..close()
+            ..moveTo(c.dx - r * 2, c.dy)
+            ..lineTo(c.dx, c.dy + r * .45)
+            ..lineTo(c.dx + r * 2, c.dy)
+            ..lineTo(c.dx, c.dy - r * .45)
+            ..close(),
+          glint,
         );
       }
+    }
+    final (angle, pop) = knife();
+    if (pop > 0 && trail.isNotEmpty) {
+      _knife(canvas, trail.last.$1, angle, pop, t);
+    }
+  }
+
+  /// A chef's knife held at the fingertip, its point leading the stroke.
+  void _knife(Canvas canvas, Offset tip, double angle, double pop, double t) {
+    canvas.save();
+    canvas.translate(tip.dx, tip.dy);
+    canvas.rotate(angle);
+    // Pops in with a little overshoot.
+    final s = Curves.easeOutBack.transform(pop.clamp(0.0, 1.0));
+    canvas.scale(s);
+    // Shadow on the board.
+    canvas.save();
+    canvas.translate(6, 10);
+    canvas.drawPath(
+      _bladeShape(),
+      Paint()
+        ..color = const Color(0x55000000)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    canvas.restore();
+    // Steel blade: bright at the edge, darker at the spine.
+    final bladeRect = const Rect.fromLTRB(-78, -15, 8, 7);
+    canvas.drawPath(
+      _bladeShape(),
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF8792A3),
+            Color(0xFFE9EEF5),
+            Color(0xFFFFFFFF),
+            Color(0xFFB4BECC),
+          ],
+          stops: [0, .35, .6, 1],
+        ).createShader(bladeRect),
+    );
+    canvas.drawPath(
+      _bladeShape(),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..color = const Color(0xFF5E6878),
+    );
+    // The honed edge, catching the light.
+    canvas.drawPath(
+      Path()
+        ..moveTo(4, 1)
+        ..quadraticBezierTo(-30, 7, -76, 6),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..color = blade.glow.withValues(alpha: .9),
+    );
+    // A glint sliding along the steel.
+    final g = -70 + ((t * 1.6) % 1) * 80;
+    canvas.save();
+    canvas.clipPath(_bladeShape());
+    canvas.drawRect(
+      Rect.fromLTWH(g, -16, 7, 26),
+      Paint()..color = const Color(0x99FFFFFF),
+    );
+    canvas.restore();
+    // Bolster and handle with brass rivets.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTRB(-84, -13, -76, 7),
+        const Radius.circular(2),
+      ),
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [Color(0xFFDDE3EA), Color(0xFF8D96A4)],
+        ).createShader(const Rect.fromLTRB(-84, -13, -76, 7)),
+    );
+    final handle = RRect.fromRectAndCorners(
+      const Rect.fromLTRB(-128, -11, -84, 5),
+      topLeft: const Radius.circular(7),
+      bottomLeft: const Radius.circular(7),
+    );
+    canvas.drawRRect(
+      handle,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF6B3A1C), Color(0xFF3A1C0A)],
+        ).createShader(handle.outerRect),
+    );
+    canvas.drawLine(
+      const Offset(-124, -8),
+      const Offset(-87, -8),
+      Paint()
+        ..strokeWidth = 1.4
+        ..color = const Color(0x55FFD9A0),
+    );
+    for (final x in [-118.0, -106.0, -94.0]) {
+      canvas.drawCircle(
+        Offset(x, -3),
+        2.6,
+        Paint()..color = const Color(0xFFB8862B),
+      );
+      canvas.drawCircle(
+        Offset(x - .7, -3.7),
+        1,
+        Paint()..color = const Color(0xFFFFE6A0),
+      );
+    }
+    canvas.restore();
+  }
+
+  /// The blade's outline: a straight spine and a curved edge to the point.
+  static Path _bladeShape() => Path()
+    ..moveTo(8, 0)
+    ..quadraticBezierTo(-10, -12, -40, -15)
+    ..lineTo(-78, -15)
+    ..lineTo(-78, 7)
+    ..quadraticBezierTo(-30, 8, 8, 0)
+    ..close();
+
+  /// The bright streak left across a fruit the moment it is cut.
+  void _slashes(Canvas canvas) {
+    for (final sl in game.slashes) {
+      final k = sl.age / Slash.life;
+      final len = sl.length * (.6 + .4 * k);
+      canvas.save();
+      canvas.translate(sl.pos.dx, sl.pos.dy);
+      canvas.rotate(sl.angle);
+      final r = Rect.fromCenter(
+        center: Offset.zero,
+        width: len,
+        height: 10 * (1 - k) + 1,
+      );
+      canvas.drawOval(
+        r.inflate(6),
+        Paint()
+          ..color = blade.glow.withValues(alpha: .5 * (1 - k))
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+      );
+      canvas.drawOval(
+        r,
+        Paint()..color = Colors.white.withValues(alpha: 1 - k),
+      );
       canvas.restore();
     }
+  }
+
+  /// A round glass flask of glowing green poison with a skull on it.
+  void _poison(Canvas canvas, Flyer f, double t) {
+    final r = f.radius;
+    canvas.save();
+    canvas.translate(f.pos.dx, f.pos.dy);
+    canvas.rotate(f.angle * .5);
+    final pulse = .5 + .5 * math.sin(t * 8);
+    canvas.drawCircle(
+      Offset(0, r * .15),
+      r * (1.2 + .08 * pulse),
+      Paint()..color = Color.fromRGBO(90, 255, 60, .18 + .1 * pulse),
+    );
+    final body = Rect.fromCircle(center: Offset(0, r * .15), radius: r * .88);
+    // Glass with poison inside, sloshing a little.
+    canvas.drawCircle(
+      body.center,
+      body.width / 2,
+      Paint()..color = const Color(0x6630203A),
+    );
+    canvas.save();
+    canvas.clipPath(Path()..addOval(body));
+    final level = body.top + body.height * (.32 + .04 * math.sin(t * 5));
+    canvas.drawRect(
+      Rect.fromLTRB(body.left, level, body.right, body.bottom),
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFB6FF5A), Color(0xFF3BC82A), Color(0xFF1A7A1A)],
+        ).createShader(body),
+    );
+    // Bubbles rising.
+    for (var i = 0; i < 4; i++) {
+      final y = body.bottom - ((t * 40 + i * 23) % body.height * .6);
+      canvas.drawCircle(
+        Offset(body.left + body.width * (.3 + .15 * i), y),
+        r * .05,
+        Paint()..color = const Color(0x99E8FFD0),
+      );
+    }
+    canvas.restore();
+    canvas.drawCircle(
+      body.center,
+      body.width / 2,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * .07
+        ..color = const Color(0xCCD8F0FF),
+    );
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(-r * .35, -r * .2),
+        width: r * .3,
+        height: r * .5,
+      ),
+      Paint()..color = const Color(0x66FFFFFF),
+    );
+    // Neck and cork.
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: Offset(0, -r * .82),
+        width: r * .38,
+        height: r * .3,
+      ),
+      Paint()..color = const Color(0xCCD8F0FF),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(0, -r * 1.02),
+          width: r * .44,
+          height: r * .26,
+        ),
+        Radius.circular(r * .06),
+      ),
+      Paint()..color = const Color(0xFFA0703A),
+    );
+    // Skull and crossbones.
+    final bone = Paint()
+      ..color = Colors.white
+      ..strokeWidth = r * .1
+      ..strokeCap = StrokeCap.round;
+    final c = Offset(0, r * .28);
+    canvas.drawLine(
+      c + Offset(-r * .34, r * .3),
+      c + Offset(r * .34, -r * .02),
+      bone,
+    );
+    canvas.drawLine(
+      c + Offset(r * .34, r * .3),
+      c + Offset(-r * .34, -r * .02),
+      bone,
+    );
+    canvas.drawCircle(c, r * .26, Paint()..color = Colors.white);
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: c + Offset(0, r * .2),
+        width: r * .3,
+        height: r * .16,
+      ),
+      Paint()..color = Colors.white,
+    );
+    final eye = Paint()..color = const Color(0xFF1A3A12);
+    canvas.drawCircle(c + Offset(-r * .1, -r * .02), r * .07, eye);
+    canvas.drawCircle(c + Offset(r * .1, -r * .02), r * .07, eye);
+    canvas.restore();
   }
 
   void _popup(Canvas canvas, Popup p, double width) {
@@ -929,9 +1235,13 @@ class _FruitPainter extends CustomPainter {
         style: TextStyle(
           fontFamily: AppText.family,
           fontWeight: FontWeight.w700,
-          fontSize: p.big ? 26 : 18,
+          fontSize: p.text == 'BOOM!' ? 44 : (p.big ? 26 : 18),
           color:
-              (p.text == '✕' || p.text == '-10'
+              (p.text.startsWith('POISON')
+                      ? const Color(0xFF8CFF4A)
+                      : p.text == 'BOOM!'
+                      ? const Color(0xFFFF7A1A)
+                      : p.text == '✕' || p.text == '-10'
                       ? const Color(0xFFFF4D4D)
                       : const Color(0xFFFFE28A))
                   .withValues(alpha: 1 - k),

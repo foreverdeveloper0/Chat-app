@@ -92,7 +92,7 @@ void main() {
       missed += g.update(1 / 60).missed;
     }
     expect(g.over, isTrue);
-    expect(g.endedBy, anyOf('lives', 'bomb'));
+    expect(g.endedBy, anyOf('lives', 'bomb', 'poison'));
     if (g.endedBy == 'lives') expect(missed, 3);
     expect(g.lives, lessThanOrEqualTo(0));
   });
@@ -120,5 +120,56 @@ void main() {
     }
     expect(early, greaterThan(4));
     expect(late, greaterThan(early));
+  });
+
+  test('the halves fly apart on the sides they were cut from', () {
+    final g = _game(FruitMode.classic);
+    final f = g.launch(11, x: 200, apex: 300)
+      ..pos = const Offset(200, 400)
+      ..vel = Offset.zero;
+    g.slice(f.pos - const Offset(0, 80), f.pos + const Offset(0, 80));
+    final left = g.halves.firstWhere((h) => !h.right);
+    final right = g.halves.firstWhere((h) => h.right);
+    expect(left.pos.dx, lessThan(200));
+    expect(right.pos.dx, greaterThan(200));
+    expect(left.vel.dx, lessThan(0));
+    expect(right.vel.dx, greaterThan(0));
+    expect(g.slashes, isNotEmpty);
+  });
+
+  test('poison costs a life in classic and points in timed', () {
+    final g = _game(FruitMode.classic);
+    final p = g.launch(poisonKind, x: 200, apex: 300)
+      ..pos = const Offset(200, 400)
+      ..vel = Offset.zero;
+    final ev = g.slice(
+      p.pos - const Offset(60, 0),
+      p.pos + const Offset(60, 0),
+    );
+    expect(ev.poison, isTrue);
+    expect(g.lives, 2);
+    expect(g.over, isFalse);
+    expect(g.score, 0);
+
+    final t = _game(FruitMode.timed)..score = 8;
+    final q = t.launch(poisonKind, x: 200, apex: 300)
+      ..pos = const Offset(200, 400)
+      ..vel = Offset.zero;
+    t.slice(q.pos - const Offset(60, 0), q.pos + const Offset(60, 0));
+    expect(t.score, 3);
+    expect(t.lives, 3);
+  });
+
+  test('a dropped poison flask costs nothing', () {
+    final g = _game(FruitMode.classic);
+    g.launch(poisonKind, x: 200, apex: 300);
+    g.launch(bombKind, x: 100, apex: 300);
+    var missed = 0;
+    for (var i = 0; i < 60 * 3; i++) {
+      missed += g.update(1 / 60).missed;
+      g.flyers.removeWhere((f) => f.fruit);
+    }
+    expect(missed, 0);
+    expect(g.lives, 3);
   });
 }

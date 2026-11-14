@@ -96,11 +96,12 @@ Swipe across the wooden board to cut the fruit thrown up from below. The
 24 fruits are pictures in `assets/images/fruit/` (whole, and two halves
 that tumble apart when cut).
 
-- Classic: three lives; every fruit that falls uncut costs one, and
-  cutting a bomb ends the game.
-- 60 Seconds: cut as much as you can; a bomb costs 10 points.
+- Classic: three lives; every fruit that falls uncut costs one, cutting a
+  green poison flask costs one, and cutting a bomb ends the game.
+- 60 Seconds: cut as much as you can; a bomb costs 10 points and poison 5.
 - One point per fruit; three or more in one swipe is a combo worth extra.
-- Pick the blade's colour (silver, fire or neon). Juice splashes and
+- A chef's knife follows your finger, leaving a glowing slash in the
+  blade's colour (silver, fire or neon). Juice splashes and
   stains the board, bombs flash and shake the screen, and the best score
   of the session is kept per mode.
 

@@ -37,13 +37,21 @@ enum FruitMode {
   timed,
 }
 
-/// A fruit or a bomb in the air.
+/// A bomb: cutting it ends a classic game.
+const bombKind = -1;
+
+/// A poison flask: cutting it costs a life (or points).
+const poisonKind = -2;
+
+/// A fruit, a bomb or a poison flask in the air.
 class Flyer {
   Flyer(this.kind, this.pos, this.vel, this.radius, this.spin);
 
-  /// Index into [fruitKinds], or -1 for a bomb.
+  /// Index into [fruitKinds], or [bombKind] / [poisonKind].
   final int kind;
-  bool get bomb => kind < 0;
+  bool get bomb => kind == bombKind;
+  bool get poison => kind == poisonKind;
+  bool get fruit => kind >= 0;
   Offset pos, vel;
   final double radius, spin;
   double angle = 0;
@@ -97,10 +105,19 @@ class Popup {
   static const life = 1.0;
 }
 
+/// The bright streak left where the blade went through something.
+class Slash {
+  Slash(this.pos, this.angle, this.length);
+  final Offset pos;
+  final double angle, length;
+  double age = 0;
+  static const life = .28;
+}
+
 /// What happened, for sounds and shakes.
 class FruitEvents {
   int cut = 0, missed = 0, combo = 0, launched = 0;
-  bool bomb = false, over = false;
+  bool bomb = false, poison = false, over = false;
 }
 
 /// The game: fruit thrown up from the bottom of a [size] board, cut by
@@ -119,6 +136,7 @@ class FruitGame {
   final drops = <Drop>[];
   final stains = <Stain>[];
   final popups = <Popup>[];
+  final slashes = <Slash>[];
 
   int score = 0, cut = 0, bestCombo = 0;
   int lives = 3;
@@ -135,6 +153,9 @@ class FruitGame {
   double sinceBomb = 99;
   Offset bombAt = Offset.zero;
 
+  /// Seconds since poison was cut, for the green flash.
+  double sincePoison = 99;
+
   double _nextWave = .6;
 
   // The swipe in progress: how many fruits it has cut, and where.
@@ -150,6 +171,7 @@ class FruitGame {
   FruitEvents update(double dt) {
     final ev = FruitEvents();
     sinceBomb += dt;
+    sincePoison += dt;
     for (final d in drops) {
       d.age += dt;
       d.vel += Offset(0, gravity * .8 * dt);
@@ -164,6 +186,10 @@ class FruitGame {
       p.age += dt;
     }
     popups.removeWhere((p) => p.age >= Popup.life);
+    for (final sl in slashes) {
+      sl.age += dt;
+    }
+    slashes.removeWhere((sl) => sl.age >= Slash.life);
     for (final h in halves) {
       h.vel += Offset(0, gravity * dt);
       h.pos += h.vel * dt;
@@ -203,7 +229,7 @@ class FruitGame {
         .toList();
     for (final f in fallen) {
       flyers.remove(f);
-      if (f.bomb || mode != FruitMode.classic) continue;
+      if (!f.fruit || mode != FruitMode.classic) continue;
       ev.missed++;
       lives--;
       popups.add(Popup(Offset(f.pos.dx, size.height - 40), '✕', true));
@@ -222,28 +248,38 @@ class FruitGame {
     bestCombo = max(bestCombo, _swipeCut);
   }
 
-  /// Throw a wave of fruit (and maybe a bomb) up from the bottom.
+  /// Throw a wave of fruit (and maybe a bomb or poison) up from the
+  /// bottom.
   int _wave() {
     final level = time / 20;
     final most = min(6, 2 + level.floor() + (rng.nextDouble() < .35 ? 1 : 0));
     final count = 1 + rng.nextInt(most);
     final bombChance = mode == FruitMode.timed
         ? .14
-        : (time < 8 ? 0.0 : min(.2, .06 + time / 400));
-    var bombs = 0;
+        : (time < 4 ? 0.0 : min(.2, .08 + time / 400));
+    final poisonChance = time < 6 ? 0.0 : min(.14, .06 + time / 600);
+    var hazards = 0;
     for (var i = 0; i < count; i++) {
-      final isBomb =
-          bombs < (time > 40 ? 2 : 1) && rng.nextDouble() < bombChance;
-      if (isBomb) bombs++;
-      launch(isBomb ? -1 : rng.nextInt(fruitKinds.length));
+      var kind = rng.nextInt(fruitKinds.length);
+      if (hazards < (time > 40 ? 2 : 1)) {
+        final roll = rng.nextDouble();
+        if (roll < bombChance) {
+          kind = bombKind;
+          hazards++;
+        } else if (roll < bombChance + poisonChance) {
+          kind = poisonKind;
+          hazards++;
+        }
+      }
+      launch(kind);
     }
     return count;
   }
 
-  /// Throw one fruit (or a bomb, for -1) up from the bottom.
+  /// Throw one fruit (or [bombKind] / [poisonKind]) up from the bottom.
   Flyer launch(int kind, {double? x, double? apex}) {
     final w = size.width, h = size.height;
-    final r = w * (kind < 0 ? .085 : .095 + rng.nextDouble() * .025);
+    final r = w * (kind < 0 ? .095 : .1 + rng.nextDouble() * .025);
     final x0 = x ?? w * (.15 + rng.nextDouble() * .7);
     final top = apex ?? h * (.12 + rng.nextDouble() * .3);
     final vy = -sqrt(2 * gravity * (h + r - top));
@@ -273,8 +309,14 @@ class FruitGame {
     for (final f in [...flyers]) {
       if (_distToSegment(f.pos, a, b) > f.radius * .92) continue;
       flyers.remove(f);
+      slashes.add(Slash(f.pos, atan2(d.dy, d.dx), f.radius * 3.2));
       if (f.bomb) {
         _explode(f, ev);
+        if (over) return ev;
+        continue;
+      }
+      if (f.poison) {
+        _poisoned(f, ev);
         if (over) return ev;
         continue;
       }
@@ -326,15 +368,50 @@ class FruitGame {
       score = max(0, score - 10);
       popups.add(Popup(f.pos, '-10', true));
     }
+    popups.add(Popup(f.pos, 'BOOM!', true));
+  }
+
+  void _poisoned(Flyer f, FruitEvents ev) {
+    ev.poison = true;
+    sincePoison = 0;
+    for (var i = 0; i < 22; i++) {
+      final a = rng.nextDouble() * pi * 2;
+      final s = 150 + rng.nextDouble() * 350;
+      drops.add(
+        Drop(
+          f.pos,
+          Offset(cos(a), sin(a)) * s,
+          i.isEven ? const Color(0xFF6BFF3A) : const Color(0xFFB04BFF),
+          3 + rng.nextDouble() * 4,
+          .5 + rng.nextDouble() * .4,
+        ),
+      );
+    }
+    stains.add(
+      Stain(
+        f.pos,
+        const Color(0xFF5BD62A),
+        f.radius * 1.8,
+        rng.nextInt(1 << 20),
+      ),
+    );
+    if (mode == FruitMode.classic) {
+      lives--;
+      popups.add(Popup(f.pos, 'POISON!  -1 LIFE', true));
+      if (lives <= 0) _end('poison', ev);
+    } else {
+      score = max(0, score - 5);
+      popups.add(Popup(f.pos, 'POISON!  -5', true));
+    }
   }
 
   void _cut(Flyer f, Offset dir) {
     // Cut along the swipe; halves fly apart either side of it.
     var d = dir / dir.distance;
     if (d.dy < 0) d = -d;
-    final n = Offset(d.dy, -d.dx); // the left side of a downward cut
+    final n = Offset(-d.dy, d.dx); // the left side of a downward cut
     final angle = atan2(d.dy, d.dx) - pi / 2;
-    final size = f.radius * 2;
+    final size = f.radius * 2.3;
     for (final right in [false, true]) {
       final side = right ? -1.0 : 1.0;
       halves.add(
