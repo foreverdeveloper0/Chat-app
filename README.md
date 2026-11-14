@@ -135,7 +135,9 @@ and back to upright when you leave.
   plate below it, and a badge on its shoulder saying what the player did and for how
   much: small blind, big blind, check, call, bet, raise, all in, fold,
   and the hand shown at the end. Nothing is written on the felt.
-- The others' cards sit behind the corner of their profile; yours stand
+- The others' cards sit behind the corner of their profile. Your picture is
+  in the middle at the bottom with your cards centred under it and your
+  chips below; yours stand
   above your name plate, at the bottom of the table.
 - Your profile is in the middle at the bottom with the buttons either
   side of it: FOLD on the left, CHECK or CALL and RAISE on the right.

@@ -45,7 +45,7 @@ class PokerScreen extends StatefulWidget {
 /// coordinates. Seat centres: you at the bottom, then clockwise.
 const _art = Size(1870, 841);
 const _seatSpots = [
-  Offset(765, 772),
+  Offset(935, 640),
   Offset(178, 548),
   Offset(270, 226),
   Offset(1440, 226),
@@ -53,12 +53,12 @@ const _seatSpots = [
 ];
 
 /// Sizes, in the picture's coordinates.
-const _avatar = 86.0, _myAvatar = 64.0;
+const _avatar = 86.0, _myAvatar = 56.0;
 const _plate = Size(270, 56), _myPlate = Size(290, 56);
 
 /// Community cards: their width, and where the middle one sits.
 const _boardCard = 122.0, _boardGap = 146.0;
-const _boardAt = Offset(935, 492);
+const _boardAt = Offset(935, 468);
 
 /// A little air under the table.
 const _bar = 6.0;
@@ -671,7 +671,7 @@ class _PokerScreenState extends State<PokerScreen>
   /// its right; beside yours.
   Offset _plateAt(Seat s) =>
       _spot(s.index) +
-      (s.index == 0 ? const Offset(215, 20) : const Offset(40, 102)) * _k;
+      (s.index == 0 ? const Offset(0, 162) : const Offset(40, 102)) * _k;
 
   /// The back of a seat: a computer player's two cards behind the upper
   /// right of the avatar, then the avatar with its turn ring.
@@ -840,7 +840,11 @@ class _PokerScreenState extends State<PokerScreen>
       // Dealer button, at the avatar's lower right.
       if (g.dealer == s.index)
         _place(
-          at + Offset(radius * .78, radius * .62),
+          // Yours sits to the left of your picture, clear of your cards.
+          at +
+              (me
+                  ? Offset(-radius - 26 * _k, radius * .2)
+                  : Offset(radius * .78, radius * .62)),
           Container(
             width: 44 * _k,
             height: 44 * _k,
@@ -861,7 +865,7 @@ class _PokerScreenState extends State<PokerScreen>
         _place(
           // On the avatar's right shoulder; yours sits past your plate.
           me
-              ? _plateAt(s) + Offset((_myPlate.width / 2 + 10) * _k, -80 * _k)
+              ? at + Offset(radius + 110 * _k, -radius * .1)
               : at + Offset(160 * _k, 34 * _k),
           badge,
           width: 240,
@@ -953,9 +957,10 @@ class _PokerScreenState extends State<PokerScreen>
   List<Widget> _yourCards(Holdem g) {
     final you = g.you;
     if (!you.inHand || you.hole.isEmpty) return const [];
-    final cw = 104 * _k;
+    final cw = 100 * _k;
     // Their lower edge tucks a little behind the plate.
-    final bottom = _plateAt(you) + Offset(-16 * _k, -_myPlate.height * .3 * _k);
+    // Centred under your picture, their lower edge behind the chips.
+    final bottom = _plateAt(you) + Offset(0, 6 * _k);
     return [
       for (var i = 0; i < 2; i++)
         _dealt(
@@ -1071,7 +1076,7 @@ class _PokerScreenState extends State<PokerScreen>
     final plate = _plateAt(you);
     final bw = 226 * _k, bh = (104 * _k).clamp(36.0, 50.0), gap = 12 * _k;
     final top = plate.dy - bh / 2;
-    final leftEdge = _spot(0).dx - _radius(you) - gap;
+    final leftEdge = plate.dx - _myPlate.width / 2 * _k - gap;
     final rightEdge = plate.dx + _myPlate.width / 2 * _k + gap;
     return Stack(
       children: [
