@@ -1273,7 +1273,7 @@ class _PokerScreenState extends State<PokerScreen>
           at +
               (me
                   ? Offset(-radius - 26 * _k, radius * .2)
-                  : Offset(radius * .78, radius * .62)),
+                  : Offset(radius * .82, -radius * .6)),
           Container(
             width: 44 * _k,
             height: 44 * _k,
@@ -1292,11 +1292,11 @@ class _PokerScreenState extends State<PokerScreen>
         ),
       if (badge != null)
         _place(
-          // Rivals: straight above the picture and its name tag; yours
+          // Rivals: across the lower part of the picture; yours
           // sits beside your picture, since your cards are under it.
           me
               ? at + Offset(radius + 104 * _k, radius * .1)
-              : at + Offset(0, -radius - 46 * _k),
+              : at + Offset(0, radius * .56),
           badge,
           width: 240,
         ),
