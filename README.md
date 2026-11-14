@@ -131,16 +131,18 @@ and back to upright when you leave.
 - The dealer button moves round each hand; the two seats after it post
   the small and big blind. Everyone gets two cards, then betting rounds
   before the flop, on the flop (three cards), the turn and the river.
-- Your profile sits at the bottom with your two cards below it and your
-  chips under them; the others' cards peek from the corner of their
-  profiles. A player who folds turns grey with FOLD across the profile;
-  their cards go, and yours stay in front of you in grey.
-- On your turn the buttons sit beside your seat: FOLD on the left, CHECK
-  or CALL and RAISE on the right. RAISE opens a panel with a slider and
-  quick amounts (minimum, half pot, pot, all in). A ring round the seat
-  counts down 20 seconds; if yours runs out you check, or fold to a bet.
-- Chips are shown as stacks coloured by value. Each bet sits beside a
-  plaque naming the move (blind, call, bet, raise, all in) in its colour.
+- Each profile has the name on a tag above the picture, the chips on a
+  plate below it, and a badge on its shoulder saying what the player did and for how
+  much: small blind, big blind, check, call, bet, raise, all in, fold,
+  and the hand shown at the end. Nothing is written on the felt.
+- The others' cards sit behind the corner of their profile; yours stand
+  above your name plate, at the bottom of the table.
+- Your profile is in the middle at the bottom with the buttons either
+  side of it: FOLD on the left, CHECK or CALL and RAISE on the right.
+  RAISE opens a panel with a slider and quick amounts (minimum, half pot,
+  pot, all in). A ring round the seat counts down 20 seconds; if yours
+  runs out you check, or fold to a bet.
+- The menu button turns sound on or off, or leaves the table.
 - Every move has its own sound: deal, card, check, call, raise, all in,
   fold, your turn, a tick through your last five seconds, win, lose and
   chips being collected (`assets/sounds/poker*.wav`).

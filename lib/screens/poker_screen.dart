@@ -8,7 +8,6 @@ import '../game/coins.dart';
 import '../game/holdem.dart';
 import '../game/sounds.dart';
 import '../theme/app_colors.dart';
-import '../widgets/game_hud.dart';
 
 /// Play chips for the card table. They last while the app is open.
 /// How much may be brought to a table with small blind [sb]: from 20 to
@@ -46,19 +45,23 @@ class PokerScreen extends StatefulWidget {
 /// coordinates. Seat centres: you at the bottom, then clockwise.
 const _art = Size(1870, 841);
 const _seatSpots = [
-  Offset(935, 604),
-  Offset(205, 555),
-  Offset(330, 262),
-  Offset(1540, 262),
-  Offset(1665, 555),
+  Offset(765, 772),
+  Offset(178, 548),
+  Offset(270, 226),
+  Offset(1440, 226),
+  Offset(1502, 548),
 ];
 
-/// From a seat's centre to its dealer or blind button.
-const _badgeOffset = Offset(76, 50);
+/// Sizes, in the picture's coordinates.
+const _avatar = 86.0, _myAvatar = 64.0;
+const _plate = Size(270, 56), _myPlate = Size(290, 56);
 
 /// Community cards: their width, and where the middle one sits.
-const _boardCard = 114.0, _boardGap = 132.0;
-const _boardAt = Offset(935, 444);
+const _boardCard = 122.0, _boardGap = 146.0;
+const _boardAt = Offset(935, 492);
+
+/// A little air under the table.
+const _bar = 6.0;
 
 /// Which of the picture's seats a table of [n] uses, by seat index.
 List<int> _seating(int n) => switch (n) {
@@ -330,13 +333,7 @@ class _PokerScreenState extends State<PokerScreen>
     return _at(p.dx, p.dy);
   }
 
-  /// Which way the middle of the table is from a seat: 1 right, -1 left.
-  double _inward(int seat) =>
-      _seatSpots[_seating(_game.seats.length)[seat]].dx < _art.width / 2
-      ? 1
-      : -1;
-
-  Offset get _potAt => _at(935, 312);
+  Offset get _potAt => _at(935, 322);
   Offset get _dealerAt => _at(935, 250);
 
   void _fly(int seat, {required bool toPot}) {
@@ -366,11 +363,13 @@ class _PokerScreenState extends State<PokerScreen>
       body: LayoutBuilder(
         builder: (context, box) {
           final size = box.biggest;
-          // The picture is shown whole, centred.
-          _k = math.min(size.width / _art.width, size.height / _art.height);
+          // The picture is shown whole, above a strip for the buttons.
+          final pad = MediaQuery.paddingOf(context);
+          final room = size.height - _bar - pad.bottom;
+          _k = math.min(size.width / _art.width, room / _art.height);
           _origin = Offset(
             (size.width - _art.width * _k) / 2,
-            (size.height - _art.height * _k) / 2,
+            math.max(0, (room - _art.height * _k) / 2),
           );
           final g = _game;
           return Stack(
@@ -393,22 +392,6 @@ class _PokerScreenState extends State<PokerScreen>
                 child: Image.asset(
                   'assets/images/poker/table.jpg',
                   fit: BoxFit.fill,
-                ),
-              ),
-              // Five places for the community cards, cut to the cards' size.
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _SlotsPainter([
-                    for (var i = 0; i < 5; i++)
-                      Rect.fromCenter(
-                        center: _at(
-                          _boardAt.dx + (i - 2) * _boardGap,
-                          _boardAt.dy,
-                        ),
-                        width: _boardCard * _k,
-                        height: _boardCard * 1.4 * _k,
-                      ),
-                  ]),
                 ),
               ),
               ..._board(g),
@@ -443,126 +426,217 @@ class _PokerScreenState extends State<PokerScreen>
     );
   }
 
-  /// From a seat's centre to its name plate: yours sits lower, below
-  /// your cards.
-  Offset _labelOffset(int seat) =>
-      seat == 0 ? const Offset(0, 198) : const Offset(0, 96);
+  Widget _topBar(Holdem g) {
+    final pad = MediaQuery.paddingOf(context);
+    return Positioned(
+      left: pad.left + 10,
+      right: pad.right + 10,
+      top: pad.top + 6,
+      child: Row(
+        children: [
+          _roundButton(
+            Icons.arrow_back_rounded,
+            () => Navigator.of(context).pop(),
+          ),
+          const SizedBox(width: 8),
+          // Chips on the table.
+          _pill(
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const _Chip(size: 16),
+                const SizedBox(width: 6),
+                Text(
+                  _short(g.you.chips),
+                  key: const ValueKey('my-chips'),
+                  style: _text(12.5),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Chips kept in the account.
+          _pill(
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.account_balance_wallet_rounded,
+                  size: 15,
+                  color: Color(0xFFFFE28A),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  _short(PokerWallet.chips),
+                  key: const ValueKey('bank'),
+                  style: _text(12, const Color(0xFFFFE28A)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(child: _status(g)),
+          const Spacer(),
+          _pill(
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.paid_rounded,
+                  size: 15,
+                  color: Color(0xFFFFD45F),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  'BLINDS ${_short(g.smallBlind)} / ${_short(g.bigBlind)}',
+                  style: _text(11.5),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          _roundButton(Icons.menu_rounded, _menu, key: const ValueKey('menu')),
+        ],
+      ),
+    );
+  }
 
-  Widget _topBar(Holdem g) => Positioned(
-    left: 10,
-    right: 10,
-    top: 8,
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        RoundButton(
-          icon: Icons.arrow_back_rounded,
-          onTap: () => Navigator.of(context).pop(),
-        ),
-        const SizedBox(width: 8),
-        _pill(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const _Chip(size: 16),
-              const SizedBox(width: 6),
-              Text(
-                formatCoins(g.you.chips),
-                key: const ValueKey('my-chips'),
-                style: _text(13),
-              ),
-            ],
+  String _short(int v) => formatCoins(v).replaceAll(' Crore', ' Cr');
+
+  Widget _roundButton(IconData icon, VoidCallback onTap, {Key? key}) =>
+      GestureDetector(
+        key: key,
+        onTap: onTap,
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF5A2A9A), Color(0xFF2A0F55)],
+            ),
+            border: Border.all(color: const Color(0xFFFFD45F), width: 1.3),
           ),
+          child: Icon(icon, size: 19, color: Colors.white),
         ),
-        const SizedBox(width: 6),
-        _pill(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.account_balance_wallet_rounded,
-                size: 15,
-                color: Color(0xFFFFE28A),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                formatCoins(PokerWallet.chips),
-                key: const ValueKey('bank'),
-                style: _text(12, const Color(0xFFFFE28A)),
-              ),
-            ],
+      );
+
+  /// Sound on or off, or leave the table.
+  Future<void> _menu() => showDialog<void>(
+    context: context,
+    builder: (d) => ValueListenableBuilder(
+      valueListenable: Sounds.muted,
+      builder: (context, muted, _) => _Dialog(
+        title: 'Menu',
+        body: 'Sound is ${muted ? 'off' : 'on'}.',
+        actions: [
+          (
+            muted ? 'SOUND ON' : 'SOUND OFF',
+            const Color(0xFF2E6BE0),
+            () => Sounds.muted.value = !muted,
           ),
-        ),
-        const Spacer(),
-        _pill(
-          Text(
-            'BLINDS ${formatCoins(g.smallBlind)}/${formatCoins(g.bigBlind)}',
-            style: _text(12),
+          (
+            'LEAVE',
+            const Color(0xFFC0392B),
+            () {
+              Navigator.pop(d);
+              Navigator.of(context).pop();
+            },
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 
-  /// The pot: stacks of chips over a gold-rimmed plate with the amount.
-  Widget _potLabel(Holdem g) => _place(
-    _potAt + Offset(0, -6 * _k),
-    Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (g.pot > 0)
-          _ChipStack(amount: g.pot, bigBlind: g.bigBlind, size: 28, columns: 4),
-        Transform.translate(
-          offset: const Offset(0, -3),
-          child: Container(
-            padding: const EdgeInsets.all(1.6),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFFFFF1B8),
-                  Color(0xFFE3B341),
-                  Color(0xFF9A6A00),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: const [
-                BoxShadow(color: Color(0x99000000), blurRadius: 6),
-              ],
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFF0B3A1C), Color(0xFF041C0C)],
-                ),
-                borderRadius: BorderRadius.circular(12.5),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    'POT',
-                    style: _text(9.5, const Color(0xFFB8E6C4), FontWeight.w600),
-                  ),
-                  const SizedBox(width: 7),
-                  Text(
-                    formatCoins(g.pot),
-                    key: const ValueKey('pot'),
-                    style: _text(15, const Color(0xFFFFE28A)),
-                  ),
-                ],
-              ),
-            ),
-          ),
+  /// Whose turn it is, or what the table is waiting for.
+  Widget _status(Holdem g) {
+    final you = g.you;
+    final mine = _myTurn;
+    final String status;
+    if (!g.playing) {
+      status = g.result == null ? 'Dealing…' : 'Next hand…';
+    } else if (_dealing) {
+      status = 'Dealing…';
+    } else if (you.folded) {
+      status = 'You folded';
+    } else if (!you.inHand) {
+      status = 'Sitting out';
+    } else if (mine) {
+      status = 'Your turn';
+    } else if (g.awaitingStreet) {
+      status = '';
+    } else {
+      status = "${g.current.name}'s turn…";
+    }
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 150),
+      opacity: status.isEmpty ? 0 : 1,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: mine ? const Color(0xEE1FA35C) : const Color(0xCC14052B),
+          borderRadius: BorderRadius.circular(11),
         ),
-      ],
+        child: Text(
+          status,
+          key: const ValueKey('status'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: _text(11.5, Colors.white, FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
+  /// The pot: a stack of chips on a wide gold-rimmed plate.
+  Widget _potLabel(Holdem g) => _place(
+    _potAt,
+    Container(
+      padding: const EdgeInsets.all(1.8),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFFFF1B8), Color(0xFFE3B341), Color(0xFF9A6A00)],
+        ),
+        borderRadius: BorderRadius.circular(40 * _k),
+        boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 8)],
+      ),
+      child: Container(
+        height: 62 * _k,
+        padding: EdgeInsets.fromLTRB(14 * _k, 0, 34 * _k, 0),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF1C1326), Color(0xFF07040C)],
+          ),
+          borderRadius: BorderRadius.circular(38 * _k),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ChipStack(
+              amount: math.max(g.pot, g.bigBlind * 4),
+              bigBlind: g.bigBlind,
+              size: 44 * _k,
+              columns: 1,
+            ),
+            SizedBox(width: 16 * _k),
+            Text('POT', style: _text(26 * _k)),
+            SizedBox(width: 14 * _k),
+            Text(
+              formatCoins(g.pot),
+              key: const ValueKey('pot'),
+              style: _text(34 * _k, const Color(0xFFFFE28A)),
+            ),
+          ],
+        ),
+      ),
     ),
+    width: 600,
   );
 
   /// The five community cards, each exactly on its place.
@@ -589,24 +663,30 @@ class _PokerScreenState extends State<PokerScreen>
     Color(0xFFB58CFF),
   ];
 
-  /// The back of a seat: the avatar on the picture's ring, the turn
-  /// timer, and a computer player's two cards tucked behind its corner.
+  // Everything about a seat is placed from the seat's own centre.
+
+  double _radius(Seat s) => (s.index == 0 ? _myAvatar : _avatar) * _k;
+
+  /// The centre of the name plate: under a rival's avatar and a little to
+  /// its right; beside yours.
+  Offset _plateAt(Seat s) =>
+      _spot(s.index) +
+      (s.index == 0 ? const Offset(215, 20) : const Offset(40, 102)) * _k;
+
+  /// The back of a seat: a computer player's two cards behind the upper
+  /// right of the avatar, then the avatar with its turn ring.
   List<Widget> _seat(Seat s) {
     final g = _game;
     final at = _spot(s.index);
     final turn = _myTurnOf(s);
     final r = g.result;
     final winner = r?.winnings.containsKey(s) ?? false;
-    final inward = _inward(s.index);
-    final radius = (s.index == 0 ? 74 : 92) * _k;
+    final radius = _radius(s);
     final reveal = r?.revealed.contains(s) ?? false;
     final dim = s.folded || !s.inHand;
-    final cardW = (reveal ? 84 : 62) * _k;
-    // Hidden cards peek out from the avatar's upper inner corner; shown
-    // cards are laid towards the middle of the table.
-    final cardsAt = reveal
-        ? at + Offset(inward * 215 * _k, -8 * _k)
-        : at + Offset(inward * 108 * _k, -52 * _k);
+    final cardW = (reveal ? 84 : 64) * _k;
+    final cardsAt =
+        at + (reveal ? const Offset(150, -48) : const Offset(128, -44)) * _k;
     return [
       if (s.bot && s.inHand)
         for (var i = 0; i < s.hole.length; i++)
@@ -616,7 +696,7 @@ class _PokerScreenState extends State<PokerScreen>
             to:
                 cardsAt +
                 Offset(
-                  (i - .5) * cardW * (reveal ? 1.04 : .55) - cardW / 2,
+                  (i - .5) * cardW * (reveal ? 1.04 : .5) - cardW / 2,
                   -cardW * .7,
                 ),
             child: AnimatedOpacity(
@@ -626,7 +706,7 @@ class _PokerScreenState extends State<PokerScreen>
                 duration: const Duration(milliseconds: 250),
                 scale: s.folded ? .5 : 1,
                 child: Transform.rotate(
-                  angle: reveal ? 0 : inward * .28 + (i - .5) * .3,
+                  angle: reveal ? 0 : .22 + (i - .5) * .26,
                   child: _CardView(
                     card: s.hole[i],
                     faceUp: reveal,
@@ -669,7 +749,6 @@ class _PokerScreenState extends State<PokerScreen>
                   ),
                 ),
               ),
-              if (s.folded) _foldMark(radius),
               // The turn timer runs round the ring.
               if (turn)
                 AnimatedBuilder(
@@ -686,260 +765,183 @@ class _PokerScreenState extends State<PokerScreen>
     ];
   }
 
-  /// What a player has put in on this street: a stack of chips beside a
-  /// plaque naming the move (blind, call, bet, raise, all in) and the
-  /// amount. It pops in each time the amount changes.
-  Widget _betPlaque(Seat s, Holdem g) {
-    final a = s.lastAction;
-    final (label, colour) = a.startsWith('All in')
-        ? ('ALL IN', const Color(0xFFFF4D5E))
-        : a.startsWith('Raise')
-        ? ('RAISE', const Color(0xFFFFB020))
-        : a.startsWith('Bet')
-        ? ('BET', const Color(0xFFFFB020))
-        : a.startsWith('Call')
-        ? ('CALL', const Color(0xFF3FE08A))
-        : a.startsWith('SB')
-        ? ('SMALL BLIND', const Color(0xFF6FB1FF))
-        : a.startsWith('BB')
-        ? ('BIG BLIND', const Color(0xFF6FB1FF))
-        : ('BET', const Color(0xFFFFE28A));
-    return TweenAnimationBuilder<double>(
-      key: ValueKey('bet-${s.index}-${s.bet}'),
-      tween: Tween(begin: .5, end: 1),
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutBack,
-      builder: (context, t, child) => Transform.scale(scale: t, child: child),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          _ChipStack(amount: s.bet, bigBlind: g.bigBlind, size: 22),
-          const SizedBox(width: 4),
-          Container(
-            padding: const EdgeInsets.all(1.3),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color.lerp(colour, Colors.white, .5)!,
-                  colour,
-                  Color.lerp(colour, Colors.black, .45)!,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(color: colour.withValues(alpha: .45), blurRadius: 7),
-              ],
-            ),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(8, 1, 8, 2),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFF14241A), Color(0xFF050B07)],
-                ),
-                borderRadius: BorderRadius.circular(8.8),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    label,
-                    style: _text(7.5, colour).copyWith(letterSpacing: .8),
-                  ),
-                  Text(formatCoins(s.bet), style: _text(13.5)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Marks a folded player: the word across the middle of the greyed
-  /// profile, on a dark band.
-  Widget _foldMark(double radius) => TweenAnimationBuilder<double>(
-    tween: Tween(begin: 0, end: 1),
-    duration: const Duration(milliseconds: 220),
-    builder: (context, t, child) => Opacity(opacity: t, child: child),
-    child: ClipOval(
-      child: SizedBox(
-        width: radius * 1.84,
-        height: radius * 1.84,
-        child: Center(
-          child: Container(
-            width: double.infinity,
-            height: radius * .62,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xE61A1A26), Color(0xE6000000)],
-              ),
-              border: Border.symmetric(
-                horizontal: BorderSide(color: Color(0x88FFFFFF), width: .8),
-              ),
-            ),
-            child: Text(
-              'FOLD',
-              style: _text(
-                radius * .4,
-                const Color(0xFFF2F2F7),
-              ).copyWith(letterSpacing: radius * .08),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-
-  /// The front of a seat, drawn over the cards: name and chips on the
-  /// picture's label, the dealer or blind button, the last action and the
-  /// chips bet.
+  /// The front of a seat, drawn over the cards: the name plate (name on
+  /// the left, chips on the right), the dealer button, and the badge that
+  /// says what the player did.
   List<Widget> _seatFront(Seat s) {
     final g = _game;
     final at = _spot(s.index);
     final turn = _myTurnOf(s);
-    final r = g.result;
-    final inward = _inward(s.index);
-    final reveal = r?.revealed.contains(s) ?? false;
-    final badge = g.dealer == s.index
-        ? 'D'
-        : g.playing && g.smallBlindSeat == s.index
-        ? 'SB'
-        : g.playing && g.bigBlindSeat == s.index
-        ? 'BB'
-        : '';
-    final betAt = s.index == 0
-        ? at + Offset(-200 * _k, -38 * _k)
-        : at + Offset(inward * 240 * _k, 70 * _k);
-    final won = r?.winnings[s];
+    final radius = _radius(s);
+    final me = s.index == 0;
+    final plate = (me ? _myPlate : _plate) * _k;
+    final badge = _badge(s);
     return [
       _place(
-        at + _labelOffset(s.index) * _k,
+        _plateAt(s),
         Container(
-          width: 238 * _k,
-          height: 68 * _k,
-          alignment: Alignment.center,
+          width: plate.width,
+          height: plate.height,
+          padding: EdgeInsets.symmetric(horizontal: 22 * _k),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFF4A1A6E), Color(0xFF1E0A35)],
+              colors: [Color(0xFF3D1763), Color(0xFF1B0930)],
             ),
-            borderRadius: BorderRadius.circular(34 * _k),
+            borderRadius: BorderRadius.circular(plate.height / 2),
             border: Border.all(
-              color: turn ? const Color(0xFFFFF1B8) : const Color(0xFFE3B341),
-              width: turn ? 2 : 1.4,
+              color: turn ? Colors.white : const Color(0xFFFFD45F),
+              width: turn ? 1.8 : 1.3,
             ),
             boxShadow: const [
-              BoxShadow(color: Color(0x88000000), blurRadius: 4),
+              BoxShadow(color: Color(0x99000000), blurRadius: 4),
             ],
           ),
+          // Chips only: the name has its own tag above the picture.
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(shortName(s.name, 7), style: _text(29 * _k)),
-                SizedBox(width: 12 * _k),
-                _Chip(size: 26 * _k),
-                SizedBox(width: 6 * _k),
+                _Chip(size: 27 * _k),
+                SizedBox(width: 9 * _k),
                 Text(
                   formatCoins(s.chips),
-                  style: _text(29 * _k, const Color(0xFFFFE28A)),
+                  maxLines: 1,
+                  style: _text(27 * _k, const Color(0xFFFFE28A)),
                 ),
               ],
             ),
           ),
         ),
+        width: 500,
       ),
-      // Dealer or blind button.
-      if (badge.isNotEmpty)
+      // The name, on its own tag over the top of the picture.
+      _place(
+        at + Offset(0, -radius - 4 * _k),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 16 * _k, vertical: 3 * _k),
+          decoration: BoxDecoration(
+            color: const Color(0xF0170722),
+            borderRadius: BorderRadius.circular(20 * _k),
+            border: Border.all(
+              color: turn ? Colors.white : const Color(0xAAFFD45F),
+              width: 1,
+            ),
+          ),
+          child: Text(
+            shortName(s.name, 9),
+            style: _text(24 * _k, Colors.white, FontWeight.w600),
+          ),
+        ),
+        width: 200,
+      ),
+      // Dealer button, at the avatar's lower right.
+      if (g.dealer == s.index)
         _place(
-          // Yours sits beside your cards, not on them.
-          at + (s.index == 0 ? const Offset(-66, -46) : _badgeOffset) * _k,
+          at + Offset(radius * .78, radius * .62),
           Container(
-            width: 62 * _k,
-            height: 62 * _k,
+            width: 44 * _k,
+            height: 44 * _k,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: RadialGradient(
-                center: const Alignment(-.3, -.4),
-                colors: badge == 'D'
-                    ? const [Colors.white, Color(0xFFCFCFE0)]
-                    : const [Color(0xFF4F7BFF), Color(0xFF1B2A9A)],
-              ),
-              border: Border.all(color: const Color(0xFFFFE28A), width: 1.6),
+              color: Colors.white,
+              border: Border.all(color: const Color(0xFF8A8A9A), width: 1),
               boxShadow: const [
                 BoxShadow(color: Color(0x88000000), blurRadius: 3),
               ],
             ),
-            child: Text(
-              badge,
-              style: _text(
-                25 * _k,
-                badge == 'D' ? const Color(0xFF1C0838) : Colors.white,
-              ),
-            ),
+            child: Text('D', style: _text(24 * _k, const Color(0xFF1C0838))),
           ),
-          width: 80,
+          width: 60,
         ),
-      // What they last did.
-      // (A folded player's profile already says so.)
-      if (s.lastAction.isNotEmpty &&
-          s.inHand &&
-          !s.folded &&
-          won == null &&
-          !(s.bet > 0 && g.playing))
+      if (badge != null)
         _place(
-          at +
-              (s.index == 0
-                  ? Offset(-200 * _k, 22 * _k)
-                  : Offset(0, -118 * _k)),
-          Container(
-            key: ValueKey('action-${s.index}'),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: s.folded
-                  ? const Color(0xEE5A1A1A)
-                  : const Color(0xEE0E1440),
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: const Color(0x66FFFFFF), width: .8),
-            ),
-            child: Text(s.lastAction, style: _text(10)),
-          ),
-          width: 140,
-        ),
-      if (won != null)
-        _place(
-          at +
-              (s.index == 0
-                  ? Offset(-200 * _k, 22 * _k)
-                  : Offset(0, -118 * _k)),
-          Text(
-            '+${formatCoins(won)}',
-            style: _text(15, const Color(0xFFFFE28A)).copyWith(
-              shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
-            ),
-          ),
-          width: 140,
-        ),
-      // Chips bet on this street, on a plaque coloured by the move.
-      if (s.bet > 0 && g.playing) _place(betAt, _betPlaque(s, g), width: 170),
-      if (reveal && s.bot)
-        _place(
-          at + Offset(inward * 215 * _k, 62 * _k),
-          _handTag(r!.values[s]!.rank.label),
-          width: 160,
+          // On the avatar's right shoulder; yours sits past your plate.
+          me
+              ? _plateAt(s) + Offset((_myPlate.width / 2 + 10) * _k, -80 * _k)
+              : at + Offset(160 * _k, 34 * _k),
+          badge,
+          width: 240,
         ),
     ];
+  }
+
+  /// The badge on a profile: the move and, under it, the amount (blind,
+  /// call, bet, raise, all in); or check, fold, the hand shown, a win.
+  Widget? _badge(Seat s) {
+    final g = _game, r = g.result;
+    if (!s.inHand) return null;
+    String top, bottom = '';
+    var fill = const Color(0xFF14101C), edge = const Color(0xFFFFD45F);
+    final won = r?.winnings[s];
+    if (s.folded) {
+      top = 'Fold';
+      edge = const Color(0xFF8A8A9A);
+    } else if (r != null && r.revealed.contains(s)) {
+      top = r.values[s]!.rank.label;
+      if (won != null) bottom = '+${formatCoins(won)}';
+    } else if (won != null) {
+      top = 'Win';
+      bottom = '+${formatCoins(won)}';
+    } else if (s.index == 0 && g.board.length >= 3 && s.bet == 0) {
+      // Between bets, yours shows what you hold so far.
+      top = evaluate([...s.hole, ...g.board]).rank.label;
+    } else {
+      final a = s.lastAction;
+      if (a.isEmpty || !g.playing) return null;
+      final amount = s.bet > 0 ? formatCoins(s.bet) : '';
+      if (a.startsWith('All in')) {
+        (top, bottom, fill) = ('All in', amount, const Color(0xFF5A1018));
+        edge = const Color(0xFFFF6B6B);
+      } else if (a.startsWith('Raise') || a.startsWith('Bet')) {
+        (top, bottom) = (a.startsWith('Raise') ? 'Raise' : 'Bet', amount);
+        fill = const Color(0xFF4A3306);
+      } else if (a.startsWith('Call')) {
+        (top, bottom, fill) = ('Call', amount, const Color(0xFF0B4A22));
+        edge = const Color(0xFF6BE08A);
+      } else if (a.startsWith('Check')) {
+        top = 'Check';
+        fill = const Color(0xFF0E3A2A);
+      } else if (a.startsWith('SB')) {
+        (top, bottom) = ('Small Blind', amount);
+      } else {
+        (top, bottom) = ('Big Blind', amount);
+      }
+    }
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('badge-${s.index}-$top-$bottom'),
+      tween: Tween(begin: .6, end: 1),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutBack,
+      builder: (context, t, child) => Transform.scale(scale: t, child: child),
+      child: Container(
+        key: ValueKey('action-${s.index}'),
+        padding: EdgeInsets.symmetric(horizontal: 18 * _k, vertical: 5 * _k),
+        decoration: BoxDecoration(
+          color: fill,
+          borderRadius: BorderRadius.circular(26 * _k),
+          border: Border.all(color: edge, width: 1.2),
+          boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 4)],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              top,
+              style: _text(
+                (bottom.isEmpty ? 24 : 19) * _k,
+                Colors.white,
+                bottom.isEmpty ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+            if (bottom.isNotEmpty) Text(bottom, style: _text(25 * _k)),
+          ],
+        ),
+      ),
+    );
   }
 
   bool _myTurnOf(Seat s) {
@@ -947,32 +949,19 @@ class _PokerScreenState extends State<PokerScreen>
     return g.playing && !_dealing && !g.awaitingStreet && g.turn == s.index;
   }
 
-  Widget _handTag(String label) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
-      color: const Color(0xEE0E1440),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: AppColors.goldTrim),
-    ),
-    child: Text(label, style: _text(10, const Color(0xFFFFE28A))),
-  );
-
-  /// Your two cards, face up and fanned over the lower half of your
-  /// avatar; your name and chips sit in front of them.
+  /// Your two cards, face up, standing just above your name plate.
   List<Widget> _yourCards(Holdem g) {
     final you = g.you;
     if (!you.inHand || you.hole.isEmpty) return const [];
-    final cw = 122 * _k;
-    final at = _spot(0) + Offset(0, 132 * _k);
-    final made = g.board.length >= 3 && !you.folded
-        ? evaluate([...you.hole, ...g.board]).rank.label
-        : null;
+    final cw = 104 * _k;
+    // Their lower edge tucks a little behind the plate.
+    final bottom = _plateAt(you) + Offset(-16 * _k, -_myPlate.height * .3 * _k);
     return [
       for (var i = 0; i < 2; i++)
         _dealt(
           key: 'c-${g.hands}-0-$i',
           order: i,
-          to: at + Offset((i - .5) * cw * .78 - cw / 2, -cw * .7),
+          to: bottom + Offset((i - .5) * cw * .86 - cw / 2, -cw * 1.4),
           // Folded: your cards stay where they are, drained to grey.
           child: ColorFiltered(
             colorFilter: you.folded
@@ -984,16 +973,10 @@ class _PokerScreenState extends State<PokerScreen>
                   ])
                 : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
             child: Transform.rotate(
-              angle: (i - .5) * .22,
+              angle: (i - .5) * .2,
               child: _CardView(card: you.hole[i], faceUp: true, width: cw),
             ),
           ),
-        ),
-      if (made != null)
-        _place(
-          _spot(0) + Offset(200 * _k, -20 * _k),
-          _handTag(made),
-          width: 160,
         ),
     ];
   }
@@ -1074,108 +1057,86 @@ class _PokerScreenState extends State<PokerScreen>
     );
   }
 
-  /// On your turn: FOLD on the left, CHECK / CALL and RAISE on the
-  /// right. RAISE opens a panel to choose the amount.
+  /// FOLD, CHECK or CALL, and RAISE along the bottom, under the table.
+  /// They are always there, dimmed when it is not your turn. RAISE opens a
+  /// panel to choose the amount.
   Widget _actions(Holdem g) {
     final you = g.you;
     final mine = _myTurn;
+    final size = MediaQuery.sizeOf(context);
     final call = g.toCall(you);
     final range = mine ? g.raiseRange(you) : null;
-    final String status;
-    if (!g.playing) {
-      status = g.result == null ? 'Dealing…' : 'Next hand coming up…';
-    } else if (_dealing) {
-      status = 'Dealing…';
-    } else if (you.folded) {
-      status = 'You folded';
-    } else if (!you.inHand) {
-      status = 'Sitting out';
-    } else if (mine) {
-      status = 'Your turn';
-    } else if (g.awaitingStreet) {
-      status = '';
-    } else {
-      status = "${g.current.name}'s turn…";
-    }
+    // Your profile and plate sit in the middle; the buttons flank them on
+    // the same line: FOLD on the left, CHECK / CALL and RAISE on the right.
+    final plate = _plateAt(you);
+    final bw = 226 * _k, bh = (104 * _k).clamp(36.0, 50.0), gap = 12 * _k;
+    final top = plate.dy - bh / 2;
+    final leftEdge = _spot(0).dx - _radius(you) - gap;
+    final rightEdge = plate.dx + _myPlate.width / 2 * _k + gap;
     return Stack(
       children: [
-        // Status, top centre-left, clear of the buttons.
         Positioned(
-          left: 290,
-          top: 14,
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 150),
-            opacity: status.isEmpty ? 0 : 1,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: mine ? const Color(0xEE1FA35C) : const Color(0xCC14052B),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                status,
-                key: const ValueKey('status'),
-                style: _text(12, Colors.white, FontWeight.w600),
-              ),
+          left: leftEdge - bw,
+          top: top,
+          child: KeyedSubtree(
+            key: const ValueKey('fold-btn'),
+            child: _btn(
+              'FOLD',
+              Icons.close_rounded,
+              const Color(0xFFD42B3A),
+              mine,
+              () => _act(g.fold),
+              bw,
+              bh,
             ),
           ),
         ),
-        if (mine) ...[
-          // Hugging your seat: FOLD just left of it, the rest just right.
-          Positioned(
-            left: _mySide(-1) - _btnWidth,
-            bottom: 10,
-            child: KeyedSubtree(
-              key: const ValueKey('fold-btn'),
-              child: _btn('FOLD', const Color(0xFFC0392B), true, () {
-                _act(g.fold);
-              }),
+        Positioned(
+          left: rightEdge,
+          top: top,
+          child: KeyedSubtree(
+            key: const ValueKey('call-btn'),
+            child: _btn(
+              call == 0
+                  ? 'CHECK'
+                  : call >= you.chips
+                  ? 'ALL IN ${_short(call)}'
+                  : 'CALL ${_short(call)}',
+              Icons.check_rounded,
+              const Color(0xFF17A04E),
+              mine,
+              () => _act(g.call),
+              bw,
+              bh,
             ),
           ),
-          Positioned(
-            left: _mySide(1),
-            bottom: 10,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _btn(
-                  call == 0
-                      ? 'CHECK'
-                      : call >= you.chips
-                      ? 'ALL IN ${formatCoins(call)}'
-                      : 'CALL ${formatCoins(call)}',
-                  const Color(0xFF1FA35C),
-                  true,
-                  () => _act(g.call),
-                ),
-                if (range != null) ...[
-                  const SizedBox(width: 8),
-                  KeyedSubtree(
-                    key: const ValueKey('raise-btn'),
-                    child: _btn(
-                      g.currentBet == 0 ? 'BET' : 'RAISE',
-                      const Color(0xFFD4A017),
-                      true,
-                      () => setState(() => _raising = !_raising),
-                      icon: _raising
-                          ? Icons.keyboard_arrow_down_rounded
-                          : Icons.keyboard_arrow_up_rounded,
-                    ),
-                  ),
-                ],
-              ],
+        ),
+        Positioned(
+          left: rightEdge + bw + gap,
+          top: top,
+          child: KeyedSubtree(
+            key: const ValueKey('raise-btn'),
+            child: _btn(
+              g.currentBet == 0 ? 'BET' : 'RAISE',
+              Icons.arrow_upward_rounded,
+              const Color(0xFFE09A12),
+              range != null,
+              () => setState(() => _raising = !_raising),
+              bw,
+              bh,
             ),
           ),
-          if (_raising && range != null) _raisePanel(g, range),
-        ],
+        ),
+        if (_raising && range != null)
+          Positioned(
+            // Over the RAISE button, kept on the screen.
+            right: math.max(8, size.width - (rightEdge + bw * 2 + gap)),
+            bottom: size.height - top + 6,
+            child: _raisePanel(g, range),
+          ),
       ],
     );
   }
-
-  static const _btnWidth = 104.0;
-
-  /// The screen x just beside your seat's label: [side] -1 left, 1 right.
-  double _mySide(int side) => _spot(0).dx + side * (125 * _k + 14);
 
   /// Choose how much to raise to: a slider, quick amounts and a confirm.
   Widget _raisePanel(Holdem g, ({int min, int max}) range) {
@@ -1184,124 +1145,109 @@ class _PokerScreenState extends State<PokerScreen>
         setState(() => _raiseTo = v.round().clamp(range.min, range.max));
     final step = g.bigBlind;
     final allIn = to >= range.max;
-    return Positioned(
-      left: _mySide(1),
-      bottom: 64,
-      child: Container(
-        key: const ValueKey('raise-panel'),
-        width: 300,
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xF24A1A7A), Color(0xF21A0832)],
-          ),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFE3B341), width: 1.6),
-          boxShadow: const [
-            BoxShadow(color: Color(0xAA000000), blurRadius: 14),
-          ],
+    return Container(
+      key: const ValueKey('raise-panel'),
+      width: 300,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xF24A1A7A), Color(0xF21A0832)],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const _Chip(size: 20),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFFD45F), width: 1.6),
+        boxShadow: const [BoxShadow(color: Color(0xAA000000), blurRadius: 14)],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const _Chip(size: 20),
+              const SizedBox(width: 8),
+              Text(
+                formatCoins(to),
+                key: const ValueKey('raise-to'),
+                style: _text(22, const Color(0xFFFFE28A)),
+              ),
+              if (allIn) ...[
                 const SizedBox(width: 8),
-                Text(
-                  formatCoins(to),
-                  key: const ValueKey('raise-to'),
-                  style: _text(24, const Color(0xFFFFE28A)),
-                ),
-                if (allIn) ...[
-                  const SizedBox(width: 8),
-                  Text('ALL IN', style: _text(12, const Color(0xFFFF8A8A))),
-                ],
+                Text('ALL IN', style: _text(12, const Color(0xFFFF8A8A))),
               ],
-            ),
-            Row(
-              children: [
-                _mini('−', () => set(to - step)),
-                Expanded(
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 6,
-                      activeTrackColor: const Color(0xFFFFD45A),
-                      inactiveTrackColor: const Color(0x55FFFFFF),
-                      thumbColor: const Color(0xFFFFF1B8),
-                      overlayColor: const Color(0x33FFD45A),
-                      thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 10,
-                      ),
-                    ),
-                    child: Slider(
-                      min: range.min.toDouble(),
-                      max: math.max(range.max, range.min + 1).toDouble(),
-                      value: to.toDouble(),
-                      onChanged: (v) {
-                        // Snap to whole big blinds, except at the ends.
-                        final snapped = v >= range.max
-                            ? range.max
-                            : range.min +
-                                  ((v - range.min) / step).round() * step;
-                        set(snapped);
-                      },
+            ],
+          ),
+          Row(
+            children: [
+              _mini('−', () => set(to - step)),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 6,
+                    activeTrackColor: const Color(0xFFFFD45A),
+                    inactiveTrackColor: const Color(0x55FFFFFF),
+                    thumbColor: const Color(0xFFFFF1B8),
+                    overlayColor: const Color(0x33FFD45A),
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 10,
                     ),
                   ),
-                ),
-                _mini('+', () => set(to + step)),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _mini('MIN', () => set(range.min), wide: true),
-                _mini(
-                  '½ POT',
-                  () => set(g.currentBet + g.pot ~/ 2),
-                  wide: true,
-                ),
-                _mini('POT', () => set(g.currentBet + g.pot), wide: true),
-                _mini('ALL IN', () => set(range.max), wide: true),
-              ],
-            ),
-            const SizedBox(height: 8),
-            GestureDetector(
-              key: const ValueKey('raise-confirm'),
-              onTap: () => _act((you) => g.raiseTo(you, to)),
-              child: Container(
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFFFFD45A),
-                      Color(0xFFD4A017),
-                      Color(0xFF9A6A00),
-                    ],
+                  child: Slider(
+                    min: range.min.toDouble(),
+                    max: math.max(range.max, range.min + 1).toDouble(),
+                    value: to.toDouble(),
+                    onChanged: (v) {
+                      // Snap to whole big blinds, except at the ends.
+                      final snapped = v >= range.max
+                          ? range.max
+                          : range.min + ((v - range.min) / step).round() * step;
+                      set(snapped);
+                    },
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: const Color(0xFFFFF1B8),
-                    width: 1.5,
-                  ),
-                ),
-                child: Text(
-                  allIn
-                      ? 'ALL IN ${formatCoins(to)}'
-                      : '${g.currentBet == 0 ? 'BET' : 'RAISE TO'} '
-                            '${formatCoins(to)}',
-                  style: _text(15, const Color(0xFF2A1400)),
                 ),
               ),
+              _mini('+', () => set(to + step)),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _mini('MIN', () => set(range.min), wide: true),
+              _mini('½ POT', () => set(g.currentBet + g.pot ~/ 2), wide: true),
+              _mini('POT', () => set(g.currentBet + g.pot), wide: true),
+              _mini('ALL IN', () => set(range.max), wide: true),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GestureDetector(
+            key: const ValueKey('raise-confirm'),
+            onTap: () => _act((you) => g.raiseTo(you, to)),
+            child: Container(
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFFFFD45A),
+                    Color(0xFFD4A017),
+                    Color(0xFF9A6A00),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFFF1B8), width: 1.5),
+              ),
+              child: Text(
+                allIn
+                    ? 'ALL IN ${_short(to)}'
+                    : '${g.currentBet == 0 ? 'BET' : 'RAISE TO'} ${_short(to)}',
+                style: _text(15, const Color(0xFF2A1400)),
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1322,48 +1268,67 @@ class _PokerScreenState extends State<PokerScreen>
         ),
       );
 
+  /// A glossy pill button with an icon, edged in gold.
   Widget _btn(
     String label,
+    IconData icon,
     Color colour,
     bool enabled,
-    VoidCallback onTap, {
-    IconData? icon,
-  }) => GestureDetector(
-    onTap: enabled ? onTap : null,
-    child: Container(
-      width: _btnWidth,
-      height: 46,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color.lerp(colour, Colors.white, .25)!,
-            colour,
-            Color.lerp(colour, Colors.black, .32)!,
+    VoidCallback onTap,
+    double width,
+    double height,
+  ) => AnimatedOpacity(
+    duration: const Duration(milliseconds: 150),
+    opacity: enabled ? 1 : .4,
+    child: GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: width,
+        height: height,
+        padding: const EdgeInsets.all(1.8),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFFF1B8), Color(0xFFE3B341), Color(0xFF9A6A00)],
+          ),
+          borderRadius: BorderRadius.circular(height / 2),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x99000000),
+              blurRadius: 6,
+              offset: Offset(0, 3),
+            ),
           ],
         ),
-        borderRadius: BorderRadius.circular(23),
-        border: Border.all(color: const Color(0xFFFFE28A), width: 1.8),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x88000000),
-            blurRadius: 6,
-            offset: Offset(0, 3),
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color.lerp(colour, Colors.white, .3)!,
+                colour,
+                Color.lerp(colour, Colors.black, .35)!,
+              ],
+              stops: const [0, .45, 1],
+            ),
+            borderRadius: BorderRadius.circular(height / 2 - 1.5),
           ),
-        ],
-      ),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label, style: _text(14.5)),
-              if (icon != null) Icon(icon, color: Colors.white, size: 20),
-            ],
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 20, color: Colors.white),
+                  const SizedBox(width: 6),
+                  Text(label, style: _text(16)),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -1371,11 +1336,17 @@ class _PokerScreenState extends State<PokerScreen>
   );
 
   Widget _pill(Widget child) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+    height: 34,
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    alignment: Alignment.center,
     decoration: BoxDecoration(
-      color: const Color(0xDD2A0F45),
-      borderRadius: BorderRadius.circular(15),
-      border: Border.all(color: AppColors.goldTrim, width: 1.4),
+      gradient: const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFF3D1763), Color(0xFF1B0930)],
+      ),
+      borderRadius: BorderRadius.circular(17),
+      border: Border.all(color: const Color(0xFFFFD45F), width: 1.3),
     ),
     child: child,
   );
@@ -1893,36 +1864,4 @@ class _TimerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TimerPainter old) => old.left != left;
-}
-
-/// The places for the community cards: a dark inset with a fine gold
-/// edge, the same size and corners as a card.
-class _SlotsPainter extends CustomPainter {
-  const _SlotsPainter(this.slots);
-  final List<Rect> slots;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (final r in slots) {
-      final rr = RRect.fromRectAndRadius(r, Radius.circular(r.width * .12));
-      canvas.drawRRect(rr, Paint()..color = const Color(0x3D000000));
-      canvas.drawRRect(
-        rr.deflate(.8),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.4
-          ..color = const Color(0x99FFE28A),
-      );
-      canvas.drawRRect(
-        rr.deflate(r.width * .09),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = .8
-          ..color = const Color(0x33FFFFFF),
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_SlotsPainter old) => true;
 }

@@ -121,10 +121,7 @@ void main() {
     // Call (or check), then next time raise, then fold.
     final hand = game.hands;
     final before = you.total, owed = game.toCall(you);
-    // The button, not the CALL plaques on the table.
-    await tester.tap(
-      find.textContaining(RegExp(r'^(CHECK$|CALL \d|ALL IN \d)')),
-    );
+    await tester.tap(find.byKey(const ValueKey('call-btn')));
     await tester.pump(const Duration(milliseconds: 100));
     expect(you.total, before + owed);
 
