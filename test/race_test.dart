@@ -156,4 +156,21 @@ void main() {
     g.update(1 / 60, RaceInput());
     expect(g.coins, 1);
   });
+
+  test('with no steering the car keeps to the road through every bend', () {
+    final g = RaceGame(opponents: 0, laps: 1, random: Random(5))
+      ..started = true;
+    for (final seg in g.segments) {
+      seg.props.removeWhere((p) => p.onRoad);
+    }
+    g.player.x = .95;
+    final input = RaceInput()..gas = true;
+    var worst = 0.0;
+    for (var i = 0; i < 60 * 120 && !g.over; i++) {
+      g.update(1 / 60, input);
+      if (i > 120) worst = max(worst, g.player.x.abs());
+    }
+    expect(g.over, isTrue);
+    expect(worst, lessThan(1));
+  });
 }

@@ -170,7 +170,9 @@ class RaceGame {
 
   /// How far past the kerb the verge goes before the fence.
   static const verge = 1.3;
-  static const centrifugal = .2;
+
+  /// Lane centres, in road half-widths from the middle.
+  static const laneGap = .62;
 
   /// Steering: how fast the wheel turns and returns (per second), and the
   /// sideways speed at full lock, in road half-widths per second.
@@ -419,9 +421,20 @@ class RaceGame {
     // Sideways speed barely depends on road speed once the car is rolling.
     final roll = pct.abs();
     final grip = min(1.0, roll * 5) * (.55 + .45 * min(1.0, roll));
-    p.x += p.steer * steerSpeed * grip * dt;
-    // Bends push the car gently outwards.
-    p.x -= dt * 2 * pct * pct * seg.curve * centrifugal;
+    var side = p.steer * steerSpeed * grip;
+    // Leaving the road is hard work: steering out past the kerb is damped.
+    if (p.x.abs() > .9 && side.sign == p.x.sign) side *= .45;
+    p.x += side * dt;
+    // Driving assist: the car follows the bends by itself (no sliding
+    // outwards), and with no steering it settles into the nearest lane and
+    // drifts back onto the road like an auto-pilot.
+    final hands = input.left || input.right;
+    if (!hands && p.stun <= 0 && roll > .02) {
+      final lane = (p.x / laneGap).round().clamp(-1, 1) * laneGap;
+      final pull = p.x.abs() > .9 ? 1.6 : .7;
+      final step = pull * dt * min(1.0, roll * 3);
+      p.x += (lane - p.x).clamp(-step, step);
+    }
 
     final rolling = p.speed > 0;
     p.boosting = input.nitro && nitro > 0 && !input.brake && rolling;
@@ -556,8 +569,6 @@ class RaceGame {
         }
       }
     }
-    // Lean into bends against the centrifugal drift.
-    want -= seg.curve * .04;
     final i = RaceInput()..gas = true;
     if (p.x < want - .05) i.right = true;
     if (p.x > want + .05) i.left = true;
