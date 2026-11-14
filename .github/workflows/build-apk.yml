@@ -29,7 +29,40 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build apk --release
+      - name: Prepare signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          ks="$RUNNER_TEMP/release.keystore"
+          # The password and alias have no spaces; drop any pasted whitespace.
+          KEYSTORE_PW=$(printf '%s' "$KEYSTORE_PW" | tr -d ' \t\r\n')
+          KEY_ALIAS=$(printf '%s' "$KEY_ALIAS" | tr -d ' \t\r\n')
+          echo "Password length: ${#KEYSTORE_PW} (expected 24). Alias length: ${#KEY_ALIAS} (expected 4)."
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set: using the debug key, so builds cannot update each other."
+          else
+            # Tolerate stray spaces, line breaks and quotes from copy and paste.
+            clean=$(printf '%s' "$KEYSTORE_B64" | tr -d ' \t\r\n"')
+            echo "Key secret length after cleanup: ${#clean} characters (a complete key is 3528)."
+            if printf '%s' "$clean" | base64 -d > "$ks" 2>/dev/null; then
+              echo "Decoded key file: $(wc -c < "$ks") bytes (a complete key is 2644)."
+            else
+              echo "The key secret is not valid base64."
+            fi
+            echo "keytool says:"
+            keytool -list -keystore "$ks" -storepass "$KEYSTORE_PW" 2>&1 | head -4 || true
+            if keytool -list -keystore "$ks" -storepass "$KEYSTORE_PW" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
+              echo "ANDROID_KEYSTORE_PATH=$ks" >> "$GITHUB_ENV"
+              echo "ANDROID_KEYSTORE_PASSWORD=$KEYSTORE_PW" >> "$GITHUB_ENV"
+              echo "ANDROID_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+              echo "Signing key OK."
+            else
+              echo "::warning::The signing key secrets are set but not valid (check the copy and paste of ANDROID_KEYSTORE_BASE64, the password and the alias). Using the debug key."
+            fi
+          fi
+      - run: flutter build apk --release --build-number=${{ github.run_number }}
       - run: cp build/app/outputs/flutter-apk/app-release.apk elite-play-ludo-demo.apk
       - uses: actions/upload-artifact@v4
         with:
@@ -43,4 +76,4 @@ jobs:
           gh release create demo elite-play-ludo-demo.apk \
             --prerelease --target "$GITHUB_SHA" \
             --title "Elite Play BD Ludo - demo APK" \
-            --notes "Demo build of the home page. Download the APK below and install it on Android."
+            --notes "build: ${{ github.run_number }}. Demo build. Install the APK below on Android; later builds can be installed from inside the app (Settings > Check for updates)."
