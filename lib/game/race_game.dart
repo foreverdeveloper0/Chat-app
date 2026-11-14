@@ -118,17 +118,25 @@ class RaceEvents {
 
 /// A circuit race seen from behind the player's car.
 class RaceGame {
-  RaceGame({this.opponents = 3, this.laps = 3, Random? random})
-    : rng = random ?? Random() {
+  RaceGame({
+    this.opponents = 3,
+    this.laps = 3,
+    this.playerColour = 0,
+    Random? random,
+  }) : rng = random ?? Random() {
     _build();
     // Two-by-two starting grid behind the line; the player starts last,
     // on the left of the back row.
+    final others = [
+      for (var c = 0; c < 4; c++)
+        if (c != playerColour % 4) c,
+    ];
     for (var i = 0; i <= opponents; i++) {
       final slot = i == 0 ? opponents : i - 1;
       final row = slot ~/ 2, col = slot.isEven ? -.45 : .45;
       final r = Racer(
         i,
-        i,
+        i == 0 ? playerColour % 4 : others[(i - 1) % 3],
         trackLength - (row + 1) * segLen * 4 - (i == 0 ? segLen * 2 : 0),
         col,
         isPlayer: i == 0,
@@ -166,11 +174,14 @@ class RaceGame {
 
   /// Steering: how fast the wheel turns and returns (per second), and the
   /// sideways speed at full lock, in road half-widths per second.
-  static const steerRate = 7.0, steerReturn = 10.0, steerSpeed = 1.5;
+  static const steerRate = 13.0, steerReturn = 15.0, steerSpeed = 1.85;
   static const carLength = segLen * .9;
   static const carHalfWidth = .17;
 
   final int opponents, laps;
+
+  /// Which of the four cars the player drives.
+  final int playerColour;
   final Random rng;
 
   final segments = <Segment>[];

@@ -17,6 +17,8 @@ const _autoplay = bool.fromEnvironment('LUDO_AUTOPLAY');
 Future<void> showRaceSetup(BuildContext context) {
   var stake = 1000;
   var laps = 3;
+  var car = 0;
+  const carNames = ['Red', 'Blue', 'Green', 'Gold'];
   final logo = games.firstWhere((g) => g.key == 'racing').logo;
   const modes = [
     ('4 Car Race', 'You against 3 computer cars', 3),
@@ -96,6 +98,62 @@ Future<void> showRaceSetup(BuildContext context) {
                 ],
               ),
               const SizedBox(height: 10),
+              // Pick a car.
+              SizedBox(
+                height: 92,
+                child: Row(
+                  children: [
+                    for (var i = 0; i < 4; i++)
+                      Expanded(
+                        child: GestureDetector(
+                          key: ValueKey('car-$i'),
+                          onTap: () => setSheet(() => car = i),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              color: i == car
+                                  ? const Color(0x33FFC93A)
+                                  : AppColors.cardInset,
+                              border: Border.all(
+                                color: i == car
+                                    ? AppColors.goldSoft
+                                    : AppColors.cardBorder,
+                                width: i == car ? 2 : 1.2,
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Expanded(
+                                  child: AnimatedScale(
+                                    scale: i == car ? 1.08 : .92,
+                                    duration: const Duration(milliseconds: 150),
+                                    child: Image.asset(
+                                      'assets/images/race/pick$i.png',
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  carNames[i],
+                                  style: AppText.title.copyWith(
+                                    fontSize: 12,
+                                    color: i == car
+                                        ? AppColors.goldSoft
+                                        : AppColors.cream,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -154,6 +212,7 @@ Future<void> showRaceSetup(BuildContext context) {
                         PageRouteBuilder<void>(
                           transitionDuration: const Duration(milliseconds: 280),
                           pageBuilder: (_, _, _) => RaceScreen(
+                            colour: car,
                             opponents: rivals,
                             laps: laps,
                             autopilot: _autoplay,

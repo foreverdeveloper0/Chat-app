@@ -24,9 +24,13 @@ class RaceScreen extends StatefulWidget {
     required this.entry,
     required this.roomId,
     this.autopilot = _autoplay,
+    this.colour = 0,
   });
 
   final int opponents, laps, entry;
+
+  /// Which of the four cars the player drives.
+  final int colour;
   final String roomId;
   final bool autopilot;
 
@@ -42,6 +46,7 @@ class _RaceScreenState extends State<RaceScreen>
   late RaceGame _game;
   late final Ticker _ticker = createTicker(_tick);
   final _frame = ValueNotifier(0);
+  final _fx = RaceFx();
 
   /// The HUD is rebuilt a few times a second, not every frame.
   final _hudTick = ValueNotifier(0);
@@ -73,7 +78,12 @@ class _RaceScreenState extends State<RaceScreen>
   }
 
   void _newRace() {
-    _game = RaceGame(opponents: widget.opponents, laps: widget.laps);
+    _game = RaceGame(
+      opponents: widget.opponents,
+      laps: widget.laps,
+      playerColour: widget.colour,
+    );
+    _fx.clear();
     RaceScreen.debugGame = _game;
     _countdown = 3.5;
     _lastCount = 4;
@@ -121,9 +131,10 @@ class _RaceScreenState extends State<RaceScreen>
     final input = widget.autopilot || _game.over ? _game.autopilot() : _input;
     if (_game.over) input.nitro = false;
     final ev = _game.update(dt, input);
+    _fx.update(dt, _game, input, ev);
     final p = _game.player;
     // The camera glides after the car instead of being bolted to it.
-    _camX += (p.x - _camX) * (1 - math.exp(-5 * dt));
+    _camX += (p.x - _camX) * (1 - math.exp(-10 * dt));
     _sky +=
         _game.segmentAt(p.z).curve * (p.speed / RaceGame.maxSpeed) * dt * .4;
 
@@ -205,6 +216,8 @@ class _RaceScreenState extends State<RaceScreen>
                   cameraX: () => _camX,
                   time: () => _clock,
                   shake: () => _shake,
+                  fx: _fx,
+                  pixelRatio: MediaQuery.devicePixelRatioOf(context),
                   repaint: _frame,
                 ),
               ),
@@ -714,7 +727,10 @@ class _PedalState extends State<_Pedal> {
   @override
   Widget build(BuildContext context) {
     return Listener(
-      onPointerDown: (_) => _set(true),
+      onPointerDown: (_) {
+        HapticFeedback.selectionClick();
+        _set(true);
+      },
       onPointerUp: (_) => _set(false),
       onPointerCancel: (_) => _set(false),
       child: AnimatedScale(

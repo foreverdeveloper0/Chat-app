@@ -72,6 +72,7 @@ A 3D-style circuit race seen from above and behind your car, using the
 art in `assets/images/race/` (cars, trees, flowers, fences, signs, obstacles).
 It is not full 3D: the cars and scenery are flat pictures on a projected road.
 
+- Pick your car (red, blue, green or gold) on the setup sheet.
 - Race 2, 3 or 4 cars (you against 1–3 computer cars) over 1, 2, 3 or 5
   laps. The track has curves, hills, a start/finish arch, trees, bushes, flowers,
   rocks, fences, flags, signs and street lamps beside the road.
@@ -84,6 +85,8 @@ It is not full 3D: the cars and scenery are flat pictures on a projected road.
   and a fence along the verge keeps the car where it can steer back on.
   Cars bump each other.
 - The pause button offers resume, restart and quit.
+- Exhaust smoke, nitro jets, grass thrown up off-road, sparks on hits and
+  tail lights that glow when braking.
 - A 3-2-1 start light, live position, lap, time and speed, and a results
   card at the end.
 
