@@ -109,7 +109,7 @@ void main() {
       await untilMyTurn();
     }
     if (game.playing && game.turn == 0) {
-      await tester.tap(find.text('FOLD'));
+      await tester.tap(find.byKey(const ValueKey('fold-btn')));
       await tester.pump(const Duration(milliseconds: 100));
       expect(you.folded, isTrue);
     }

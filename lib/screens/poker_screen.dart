@@ -36,19 +36,23 @@ class PokerScreen extends StatefulWidget {
   State<PokerScreen> createState() => _PokerScreenState();
 }
 
-/// The supplied table picture is 1807 x 870; everything is placed in its
+/// The supplied table picture is 1870 x 841; everything is placed in its
 /// coordinates. Seat centres: you at the bottom, then clockwise.
-const _art = Size(1807, 870);
+const _art = Size(1870, 841);
 const _seatSpots = [
-  Offset(897, 713),
-  Offset(254, 585),
-  Offset(301, 253),
-  Offset(1491, 253),
-  Offset(1537, 585),
+  Offset(935, 604),
+  Offset(205, 555),
+  Offset(330, 262),
+  Offset(1540, 262),
+  Offset(1665, 555),
 ];
 
-/// From a seat's centre to the picture's label under it and to its "+".
-const _labelOffset = Offset(9, 88), _badgeOffset = Offset(97, 24);
+/// From a seat's centre to its dealer or blind button.
+const _badgeOffset = Offset(76, 50);
+
+/// Community cards: their width, and where the middle one sits.
+const _boardCard = 114.0, _boardGap = 132.0;
+const _boardAt = Offset(935, 444);
 
 /// Which of the picture's seats a table of [n] uses, by seat index.
 List<int> _seating(int n) => switch (n) {
@@ -180,10 +184,11 @@ class _PokerScreenState extends State<PokerScreen>
     final s = g.current;
     _clock.forward(from: 0);
     if (!s.bot) {
-      setState(() {
-        _raiseTo = g.raiseRange(s)?.min ?? 0;
-        _raising = false;
-      });
+      // The buttons may already be up and the raise panel open: leave
+      // what you have chosen alone.
+      if (!_raising) {
+        setState(() => _raiseTo = g.raiseRange(s)?.min ?? 0);
+      }
       HapticFeedback.selectionClick();
       Sounds.play(Sfx.turn);
       return;
@@ -278,8 +283,8 @@ class _PokerScreenState extends State<PokerScreen>
       ? 1
       : -1;
 
-  Offset get _potAt => _at(903, 318);
-  Offset get _dealerAt => _at(903, 250);
+  Offset get _potAt => _at(935, 312);
+  Offset get _dealerAt => _at(935, 250);
 
   void _fly(int seat, {required bool toPot}) {
     if (!mounted) return;
@@ -315,7 +320,6 @@ class _PokerScreenState extends State<PokerScreen>
             (size.height - _art.height * _k) / 2,
           );
           final g = _game;
-          final used = _seating(g.seats.length);
           return Stack(
             fit: StackFit.expand,
             children: [
@@ -338,9 +342,22 @@ class _PokerScreenState extends State<PokerScreen>
                   fit: BoxFit.fill,
                 ),
               ),
-              // Seats nobody sits at keep the picture's empty chair.
-              for (var i = 0; i < 5; i++)
-                if (!used.contains(i)) _emptySeat(_seatSpots[i]),
+              // Five places for the community cards, cut to the cards' size.
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _SlotsPainter([
+                    for (var i = 0; i < 5; i++)
+                      Rect.fromCenter(
+                        center: _at(
+                          _boardAt.dx + (i - 2) * _boardGap,
+                          _boardAt.dy,
+                        ),
+                        width: _boardCard * _k,
+                        height: _boardCard * 1.4 * _k,
+                      ),
+                  ]),
+                ),
+              ),
               ..._board(g),
               _potLabel(g),
               for (final s in g.seats) ..._seat(s),
@@ -373,21 +390,10 @@ class _PokerScreenState extends State<PokerScreen>
     );
   }
 
-  /// Covers the picture's "Invite" label on a seat that is not in use.
-  Widget _emptySeat(Offset spot) => _place(
-    _at(spot.dx + _labelOffset.dx, spot.dy + _labelOffset.dy),
-    Container(
-      width: 236 * _k,
-      height: 66 * _k,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: const Color(0xFF2A0F45),
-        borderRadius: BorderRadius.circular(33 * _k),
-        border: Border.all(color: AppColors.goldTrim, width: 1.2),
-      ),
-      child: Text('Empty', style: _text(30 * _k, const Color(0x99FFFFFF))),
-    ),
-  );
+  /// From a seat's centre to its name plate: yours sits lower, below
+  /// your cards.
+  Offset _labelOffset(int seat) =>
+      seat == 0 ? const Offset(0, 198) : const Offset(0, 96);
 
   Widget _topBar(Holdem g) => Positioned(
     left: 10,
@@ -487,23 +493,22 @@ class _PokerScreenState extends State<PokerScreen>
     ),
   );
 
-  /// The five community cards, on the picture's dashed places.
+  /// The five community cards, each exactly on its place.
   List<Widget> _board(Holdem g) {
-    const xs = [598.0, 750.0, 903.0, 1058.0, 1215.0];
-    final cw = 118 * _k;
+    final cw = _boardCard * _k;
     return [
       for (var i = 0; i < g.board.length; i++)
         _dealt(
           key: 'b-${g.hands}-$i',
           order: i < 3 ? i : 0,
-          to: _at(xs[i], 463) - Offset(cw / 2, cw * .7),
+          to:
+              _at(_boardAt.dx + (i - 2) * _boardGap, _boardAt.dy) -
+              Offset(cw / 2, cw * .7),
           child: _CardView(card: g.board[i], faceUp: true, width: cw),
         ),
     ];
   }
 
-  /// A seat: avatar over the picture's silhouette, name and chips over its
-  /// label, the bet, and (for the computer players) their two cards.
   static const _colours = [
     Color(0xFF4FB8FF),
     Color(0xFFFF6FA3),
@@ -521,7 +526,7 @@ class _PokerScreenState extends State<PokerScreen>
     final r = g.result;
     final winner = r?.winnings.containsKey(s) ?? false;
     final inward = _inward(s.index);
-    final radius = 92 * _k;
+    final radius = (s.index == 0 ? 74 : 92) * _k;
     final reveal = r?.revealed.contains(s) ?? false;
     final dim = s.folded || !s.inHand;
     final cardW = (reveal ? 84 : 62) * _k;
@@ -545,9 +550,17 @@ class _PokerScreenState extends State<PokerScreen>
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 250),
               opacity: s.folded ? 0 : 1,
-              child: Transform.rotate(
-                angle: reveal ? 0 : inward * .28 + (i - .5) * .3,
-                child: _CardView(card: s.hole[i], faceUp: reveal, width: cardW),
+              child: AnimatedScale(
+                duration: const Duration(milliseconds: 250),
+                scale: s.folded ? .5 : 1,
+                child: Transform.rotate(
+                  angle: reveal ? 0 : inward * .28 + (i - .5) * .3,
+                  child: _CardView(
+                    card: s.hole[i],
+                    faceUp: reveal,
+                    width: cardW,
+                  ),
+                ),
               ),
             ),
           ),
@@ -583,6 +596,7 @@ class _PokerScreenState extends State<PokerScreen>
                   ),
                 ),
               ),
+              if (s.folded) _foldStamp(radius * .5),
               // The turn timer runs round the ring.
               if (turn)
                 AnimatedBuilder(
@@ -598,6 +612,36 @@ class _PokerScreenState extends State<PokerScreen>
       ),
     ];
   }
+
+  /// A red FOLD stamp, slapped on at a slant.
+  Widget _foldStamp(double height) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: 1.8, end: 1),
+    duration: const Duration(milliseconds: 260),
+    curve: Curves.easeOutBack,
+    builder: (context, scale, child) =>
+        Transform.scale(scale: scale, child: child),
+    child: Transform.rotate(
+      angle: -.22,
+      child: Container(
+        height: height,
+        padding: EdgeInsets.symmetric(horizontal: height * .32),
+        decoration: BoxDecoration(
+          color: const Color(0xE6B3202E),
+          borderRadius: BorderRadius.circular(height * .22),
+          border: Border.all(color: Colors.white, width: 1.6),
+          boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 5)],
+        ),
+        // Only as wide as the word.
+        child: Center(
+          widthFactor: 1,
+          child: Text(
+            'FOLD',
+            style: _text(height * .56).copyWith(letterSpacing: 1.5),
+          ),
+        ),
+      ),
+    ),
+  );
 
   /// The front of a seat, drawn over the cards: name and chips on the
   /// picture's label, the dealer or blind button, the last action and the
@@ -617,12 +661,12 @@ class _PokerScreenState extends State<PokerScreen>
         ? 'BB'
         : '';
     final betAt = s.index == 0
-        ? at + Offset(0, -150 * _k)
+        ? at + Offset(-200 * _k, -38 * _k)
         : at + Offset(inward * 215 * _k, 70 * _k);
     final won = r?.winnings[s];
     return [
       _place(
-        at + _labelOffset * _k,
+        at + _labelOffset(s.index) * _k,
         Container(
           width: 238 * _k,
           height: 68 * _k,
@@ -660,41 +704,45 @@ class _PokerScreenState extends State<PokerScreen>
           ),
         ),
       ),
-      // Dealer or blind button, over the picture's "+".
-      _place(
-        at + _badgeOffset * _k,
-        Container(
-          width: 64 * _k,
-          height: 64 * _k,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              center: const Alignment(-.3, -.4),
-              colors: badge == 'D'
-                  ? const [Colors.white, Color(0xFFCFCFE0)]
-                  : badge.isEmpty
-                  ? const [Color(0xFF5A2A86), Color(0xFF2A0F45)]
-                  : const [Color(0xFF4F7BFF), Color(0xFF1B2A9A)],
+      // Dealer or blind button.
+      if (badge.isNotEmpty)
+        _place(
+          // Yours sits beside your cards, not on them.
+          at + (s.index == 0 ? const Offset(-66, -46) : _badgeOffset) * _k,
+          Container(
+            width: 62 * _k,
+            height: 62 * _k,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                center: const Alignment(-.3, -.4),
+                colors: badge == 'D'
+                    ? const [Colors.white, Color(0xFFCFCFE0)]
+                    : const [Color(0xFF4F7BFF), Color(0xFF1B2A9A)],
+              ),
+              border: Border.all(color: const Color(0xFFFFE28A), width: 1.6),
+              boxShadow: const [
+                BoxShadow(color: Color(0x88000000), blurRadius: 3),
+              ],
             ),
-            border: Border.all(color: const Color(0xFFFFE28A), width: 1.6),
+            child: Text(
+              badge,
+              style: _text(
+                25 * _k,
+                badge == 'D' ? const Color(0xFF1C0838) : Colors.white,
+              ),
+            ),
           ),
-          child: badge.isEmpty
-              ? _Chip(size: 40 * _k, colour: const Color(0xFFD4A017))
-              : Text(
-                  badge,
-                  style: _text(
-                    26 * _k,
-                    badge == 'D' ? const Color(0xFF1C0838) : Colors.white,
-                  ),
-                ),
+          width: 80,
         ),
-        width: 80,
-      ),
       // What they last did.
       if (s.lastAction.isNotEmpty && s.inHand && won == null)
         _place(
-          at + Offset(0, -118 * _k),
+          at +
+              (s.index == 0
+                  ? Offset(-200 * _k, 22 * _k)
+                  : Offset(0, -118 * _k)),
           Container(
             key: ValueKey('action-${s.index}'),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -711,7 +759,10 @@ class _PokerScreenState extends State<PokerScreen>
         ),
       if (won != null)
         _place(
-          at + Offset(0, -118 * _k),
+          at +
+              (s.index == 0
+                  ? Offset(-200 * _k, 22 * _k)
+                  : Offset(0, -118 * _k)),
           Text(
             '+${formatCoins(won)}',
             style: _text(15, const Color(0xFFFFE28A)).copyWith(
@@ -775,8 +826,8 @@ class _PokerScreenState extends State<PokerScreen>
   List<Widget> _yourCards(Holdem g) {
     final you = g.you;
     if (!you.inHand || you.hole.isEmpty) return const [];
-    final cw = 134 * _k;
-    final at = _spot(0) + Offset(0, 34 * _k);
+    final cw = 122 * _k;
+    final at = _spot(0) + Offset(0, 132 * _k);
     final made = g.board.length >= 3 && !you.folded
         ? evaluate([...you.hole, ...g.board]).rank.label
         : null;
@@ -797,7 +848,7 @@ class _PokerScreenState extends State<PokerScreen>
         ),
       if (made != null)
         _place(
-          _spot(0) + Offset(-185 * _k, -60 * _k),
+          _spot(0) + Offset(200 * _k, -20 * _k),
           _handTag(made),
           width: 160,
         ),
@@ -836,7 +887,7 @@ class _PokerScreenState extends State<PokerScreen>
     final split = r.winnings.length > 1;
     final hand = r.values[w]?.rank.label;
     return _place(
-      _at(903, 300),
+      _at(935, 292),
       TweenAnimationBuilder<double>(
         key: ValueKey('result-${g.hands}'),
         tween: Tween(begin: .6, end: 1),
@@ -931,9 +982,12 @@ class _PokerScreenState extends State<PokerScreen>
           Positioned(
             left: _mySide(-1) - _btnWidth,
             bottom: 10,
-            child: _btn('FOLD', const Color(0xFFC0392B), true, () {
-              _act(g.fold);
-            }),
+            child: KeyedSubtree(
+              key: const ValueKey('fold-btn'),
+              child: _btn('FOLD', const Color(0xFFC0392B), true, () {
+                _act(g.fold);
+              }),
+            ),
           ),
           Positioned(
             left: _mySide(1),
@@ -975,8 +1029,7 @@ class _PokerScreenState extends State<PokerScreen>
   static const _btnWidth = 104.0;
 
   /// The screen x just beside your seat's label: [side] -1 left, 1 right.
-  double _mySide(int side) =>
-      _spot(0).dx + _labelOffset.dx * _k + side * (125 * _k + 14);
+  double _mySide(int side) => _spot(0).dx + side * (125 * _k + 14);
 
   /// Choose how much to raise to: a slider, quick amounts and a confirm.
   Widget _raisePanel(Holdem g, ({int min, int max}) range) {
@@ -1694,4 +1747,36 @@ class _TimerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TimerPainter old) => old.left != left;
+}
+
+/// The places for the community cards: a dark inset with a fine gold
+/// edge, the same size and corners as a card.
+class _SlotsPainter extends CustomPainter {
+  const _SlotsPainter(this.slots);
+  final List<Rect> slots;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final r in slots) {
+      final rr = RRect.fromRectAndRadius(r, Radius.circular(r.width * .12));
+      canvas.drawRRect(rr, Paint()..color = const Color(0x3D000000));
+      canvas.drawRRect(
+        rr.deflate(.8),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4
+          ..color = const Color(0x99FFE28A),
+      );
+      canvas.drawRRect(
+        rr.deflate(r.width * .09),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = .8
+          ..color = const Color(0x33FFFFFF),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SlotsPainter old) => true;
 }

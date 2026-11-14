@@ -125,10 +125,14 @@ and back to upright when you leave.
 - The dealer button moves round each hand; the two seats after it post
   the small and big blind. Everyone gets two cards, then betting rounds
   before the flop, on the flop (three cards), the turn and the river.
+- Your profile sits at the bottom with your two cards below it and your
+  chips under them; the others' cards peek from the corner of their
+  profiles. A player who folds is stamped FOLD and their cards go.
 - On your turn the buttons sit beside your seat: FOLD on the left, CHECK
   or CALL and RAISE on the right. RAISE opens a panel with a slider and
   quick amounts (minimum, half pot, pot, all in). A ring round the seat
   counts down 20 seconds; if yours runs out you check, or fold to a bet.
+- Chips are shown as stacks coloured by value, for the pot and each bet.
 - The best five cards from your two and the five on the table win:
   straight flush, four of a kind, full house, flush, straight, three of
   a kind, two pair, pair, high card. Ties split the pot, and a player
