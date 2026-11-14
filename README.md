@@ -111,25 +111,26 @@ that tumble apart when cut).
   stains the board for a few seconds, bombs flash and shake the screen,
   and the best score of the session is kept per mode.
 
-## Poker (Teen Patti)
+## Poker (Texas Hold'em)
 
-Three-card Teen Patti at a table of two to five: you and computer
-players, with play chips only.
+No-limit Texas Hold'em at a table of two to five: you and computer
+players, with play chips only. The table is the supplied picture, laid
+out sideways, so the phone turns to landscape while the table is open
+and back to upright when you leave.
 
-- Pick a table (boot 10 to 2,000) and how many sit at it. You bring the
-  table's buy-in from your chips and take what is left back when you
-  leave. Chips last while the app is open; free chips are offered when
-  you run out.
-- Everyone pays the boot and gets three cards face down. On your turn:
-  play BLIND for the stake, or SEE your cards and pay CHAAL (double);
-  RAISE doubles the bet; PACK folds.
-- With two players left you can pay for a SHOW; the better hand takes
-  the pot and the asker loses a tie. A seen player can ask the previous
-  seen player for a SIDE SHOW; the weaker hand packs.
-- Hands, best first: trail, pure sequence, sequence, colour, pair, high
-  card. A-K-Q is the top sequence, then A-2-3.
-- A player who cannot cover a bet goes all in and the cards are shown;
-  the pot is capped at 1,024 boots, when everyone left must show.
-- The computer players have different temperaments: they play blind for
-  a while, fold weak cards, raise strong ones, bluff now and then, ask
-  for side shows and get a new stack when they go broke.
+- Pick a table (blinds 10/20 up to 1K/2K) and how many sit at it. You
+  bring the table's buy-in from your chips and take what is left back
+  when you leave. Chips last while the app is open; free chips are
+  offered when you run out.
+- The dealer button moves round each hand; the two seats after it post
+  the small and big blind. Everyone gets two cards, then betting rounds
+  before the flop, on the flop (three cards), the turn and the river.
+- On your turn: FOLD, CHECK or CALL, or BET / RAISE. The raise amount
+  steps by a big blind, or jumps to half pot, pot or all in.
+- The best five cards from your two and the five on the table win:
+  straight flush, four of a kind, full house, flush, straight, three of
+  a kind, two pair, pair, high card. Ties split the pot, and a player
+  who is all in for less can only win the side pot they matched.
+- The computer players have different temperaments: they fold weak
+  cards, call with draws, bet and raise strong hands, bluff now and
+  then, and get a new stack when they go broke.

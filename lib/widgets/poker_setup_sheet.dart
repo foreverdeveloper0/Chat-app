@@ -2,19 +2,19 @@ import 'package:flutter/material.dart';
 
 import '../game/catalog.dart';
 import '../game/coins.dart';
-import '../screens/teen_patti_screen.dart';
+import '../screens/poker_screen.dart';
 import '../theme/app_colors.dart';
 import 'home_sections.dart' show Pressable, hubCard;
 
-/// Tables: name, boot, and the chips you bring to it.
+/// Tables: name, small blind, and the chips you bring to it.
 const _tables = [
-  ('Starter Table', 10, 1000),
-  ('Silver Table', 100, 10000),
-  ('Gold Table', 500, 50000),
-  ('Royal Table', 2000, 200000),
+  ('Starter Table', 10, 2000),
+  ('Silver Table', 50, 10000),
+  ('Gold Table', 250, 50000),
+  ('Royal Table', 1000, 200000),
 ];
 
-/// Pick a table and how many sit at it for Teen Patti.
+/// Pick a table and how many sit at it for Texas Hold'em.
 Future<void> showPokerSetup(BuildContext context) {
   var players = 5;
   final logo = games.firstWhere((g) => g.key == 'poker').logo;
@@ -52,7 +52,7 @@ Future<void> showPokerSetup(BuildContext context) {
               Image.asset(logo, height: 84),
               const SizedBox(height: 4),
               Text(
-                'TEEN PATTI',
+                "TEXAS HOLD'EM",
                 style: AppText.title.copyWith(
                   fontSize: 20,
                   color: AppColors.goldSoft,
@@ -154,8 +154,8 @@ Future<void> showPokerSetup(BuildContext context) {
                             transitionDuration: const Duration(
                               milliseconds: 280,
                             ),
-                            pageBuilder: (_, _, _) => TeenPattiScreen(
-                              boot: boot,
+                            pageBuilder: (_, _, _) => PokerScreen(
+                              smallBlind: boot,
                               buyIn: buyIn,
                               players: players,
                             ),
@@ -189,7 +189,8 @@ Future<void> showPokerSetup(BuildContext context) {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    'Boot ${formatCoins(boot)}  ·  '
+                                    'Blinds ${formatCoins(boot)}/'
+                                    '${formatCoins(boot * 2)}  ·  '
                                     'Buy-in ${formatCoins(buyIn)}',
                                     style: AppText.title.copyWith(
                                       fontSize: 11.5,
