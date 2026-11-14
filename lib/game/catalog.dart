@@ -20,5 +20,5 @@ const games = [
   GameInfo('16 Ghuti', 'ghuti', ready: true),
   GameInfo('Car Racing', 'racing', ready: true),
   GameInfo('Fruit Cut', 'fruit', ready: true),
-  GameInfo('Poker', 'poker'),
+  GameInfo('Poker', 'poker', ready: true),
 ];

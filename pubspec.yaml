@@ -68,6 +68,7 @@ flutter:
     - assets/images/ghuti/
     - assets/images/race/
     - assets/images/fruit/
+    - assets/images/poker/
     - assets/sounds/
 
   # To add assets to your application, add an assets section, like this:

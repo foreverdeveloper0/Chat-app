@@ -111,25 +111,25 @@ that tumble apart when cut).
   stains the board for a few seconds, bombs flash and shake the screen,
   and the best score of the session is kept per mode.
 
-The other game on the hub (Poker)
-is a placeholder that says "coming soon".
+## Poker (Teen Patti)
 
-## Run
+Three-card Teen Patti at a table of two to five: you and computer
+players, with play chips only.
 
-```
-flutter pub get
-flutter run
-```
-
-## Demo APK
-
-Every push builds an APK with GitHub Actions and publishes it under
-**Releases → Elite Play BD Ludo - demo APK**.
-
-## Sounds
-
-All effects in `assets/sounds` were synthesized for this project. The speaker button in a match mutes them.
-
-## Fonts
-
-Fredoka, licensed under the SIL Open Font License 1.1.
+- Pick a table (boot 10 to 2,000) and how many sit at it. You bring the
+  table's buy-in from your chips and take what is left back when you
+  leave. Chips last while the app is open; free chips are offered when
+  you run out.
+- Everyone pays the boot and gets three cards face down. On your turn:
+  play BLIND for the stake, or SEE your cards and pay CHAAL (double);
+  RAISE doubles the bet; PACK folds.
+- With two players left you can pay for a SHOW; the better hand takes
+  the pot and the asker loses a tie. A seen player can ask the previous
+  seen player for a SIDE SHOW; the weaker hand packs.
+- Hands, best first: trail, pure sequence, sequence, colour, pair, high
+  card. A-K-Q is the top sequence, then A-2-3.
+- A player who cannot cover a bet goes all in and the cards are shown;
+  the pot is capped at 1,024 boots, when everyone left must show.
+- The computer players have different temperaments: they play blind for
+  a while, fold weak cards, raise strong ones, bluff now and then, ask
+  for side shows and get a new stack when they go broke.
