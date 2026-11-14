@@ -23,6 +23,8 @@ enum Sfx {
   // Carrom: pieces knocking together, a piece dropping into a pocket
   hit,
   pocket,
+  // Fruit Cut: the blade going through a fruit
+  slice,
 }
 
 abstract final class Sounds {

@@ -9,6 +9,7 @@ import '../widgets/banner_carousel.dart';
 import '../widgets/carrom_setup_sheet.dart';
 import '../widgets/ghuti_setup_sheet.dart';
 import '../widgets/race_setup_sheet.dart';
+import '../widgets/fruit_setup_sheet.dart';
 import '../widgets/game_setup_sheet.dart';
 import '../widgets/home_sections.dart';
 import '../widgets/update_ui.dart';
@@ -80,6 +81,8 @@ class _HomeScreenState extends State<HomeScreen> {
         showGhutiSetup(context);
       case 'racing':
         showRaceSetup(context);
+      case 'fruit':
+        showFruitSetup(context);
       default:
         showComingSoon(context, game.name);
     }

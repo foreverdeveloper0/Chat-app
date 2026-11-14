@@ -90,8 +90,22 @@ It is not full 3D: the cars and scenery are flat pictures on a projected road.
 - A 3-2-1 start light, live position, lap, time and speed, and a results
   card at the end.
 
-The other games on the hub (Fruit Cut, Poker)
-are placeholders that say "coming soon".
+## Fruit Cut
+
+Swipe across the wooden board to cut the fruit thrown up from below. The
+24 fruits are pictures in `assets/images/fruit/` (whole, and two halves
+that tumble apart when cut).
+
+- Classic: three lives; every fruit that falls uncut costs one, and
+  cutting a bomb ends the game.
+- 60 Seconds: cut as much as you can; a bomb costs 10 points.
+- One point per fruit; three or more in one swipe is a combo worth extra.
+- Pick the blade's colour (silver, fire or neon). Juice splashes and
+  stains the board, bombs flash and shake the screen, and the best score
+  of the session is kept per mode.
+
+The other game on the hub (Poker)
+is a placeholder that says "coming soon".
 
 ## Run
 

@@ -67,6 +67,7 @@ flutter:
     - assets/images/carrom/
     - assets/images/ghuti/
     - assets/images/race/
+    - assets/images/fruit/
     - assets/sounds/
 
   # To add assets to your application, add an assets section, like this:
