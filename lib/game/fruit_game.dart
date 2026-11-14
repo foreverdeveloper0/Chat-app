@@ -86,13 +86,21 @@ class Drop {
 
 /// A juice stain on the board, fading.
 class Stain {
-  Stain(this.pos, this.colour, this.size, this.seed);
+  Stain(this.pos, this.colour, this.size, this.seed, [this.angle = 0]);
   final Offset pos;
   final Color colour;
   final double size;
   final int seed;
+
+  /// The direction the blade was moving, which the juice sprays along.
+  final double angle;
   double age = 0;
-  static const life = 3.0;
+
+  /// Stains stay wet and bright for a while, then soak in and fade.
+  static const life = 12.0, fadeFrom = 8.0;
+  double get strength => age < fadeFrom
+      ? 1
+      : (1 - (age - fadeFrom) / (life - fadeFrom)).clamp(0, 1);
 }
 
 /// Points or a combo message floating up where it was earned.
@@ -440,8 +448,16 @@ class FruitGame {
         ),
       );
     }
-    stains.add(Stain(f.pos, juice, f.radius * 1.6, rng.nextInt(1 << 20)));
-    if (stains.length > 14) stains.removeAt(0);
+    stains.add(
+      Stain(
+        f.pos,
+        juice,
+        f.radius * 1.7,
+        rng.nextInt(1 << 20),
+        atan2(d.dy, d.dx),
+      ),
+    );
+    if (stains.length > 24) stains.removeAt(0);
     popups.add(Popup(f.pos, '+1', false));
   }
 

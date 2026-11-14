@@ -253,6 +253,7 @@ class _FruitScreenState extends State<FruitScreen>
                       shake: () => _shake,
                       touching: () => _pointer != null,
                       knife: () => (_knifeAngle, _knifePop),
+                      pixelRatio: MediaQuery.devicePixelRatioOf(context),
                       repaint: _frame,
                     ),
                   ),
@@ -677,6 +678,7 @@ class _FruitPainter extends CustomPainter {
     required this.shake,
     required this.touching,
     required this.knife,
+    required this.pixelRatio,
     required Listenable repaint,
   }) : super(repaint: repaint);
 
@@ -688,6 +690,7 @@ class _FruitPainter extends CustomPainter {
 
   /// The knife's heading and how far it has popped in (0..1).
   final (double, double) Function() knife;
+  final double pixelRatio;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -696,21 +699,10 @@ class _FruitPainter extends CustomPainter {
     if (s > 0) {
       canvas.translate(math.sin(t * 80) * s * 8, math.cos(t * 65) * s * 6);
     }
-    // Juice stains soaking into the board.
+    // Juice splashed over the board.
+    _forget(_stainCache, g.stains);
     for (final st in g.stains) {
-      final a = (1 - st.age / Stain.life).clamp(0.0, 1.0) * .55;
-      final paint = Paint()..color = st.colour.withValues(alpha: a);
-      final rnd = math.Random(st.seed);
-      canvas.drawCircle(st.pos, st.size * .55, paint);
-      for (var i = 0; i < 7; i++) {
-        final ang = rnd.nextDouble() * math.pi * 2;
-        final d = st.size * (.4 + rnd.nextDouble() * .6);
-        canvas.drawCircle(
-          st.pos + Offset(math.cos(ang), math.sin(ang)) * d,
-          st.size * (.08 + rnd.nextDouble() * .16),
-          paint,
-        );
-      }
+      _blitStain(canvas, st);
     }
     // Shadows on the board, then the fruit above them.
     final shadow = Paint()..color = const Color(0x33000000);
@@ -752,6 +744,7 @@ class _FruitPainter extends CustomPainter {
     }
     _slashes(canvas);
     _blade(canvas, t);
+    _forget(_popupCache, g.popups);
     for (final p in g.popups) {
       _popup(canvas, p, size.width);
     }
@@ -887,6 +880,140 @@ class _FruitPainter extends CustomPainter {
     canvas.restore();
   }
 
+  /// A splash of juice: a wet blob with a darker rim, spray thrown along
+  /// the cut, droplets, and drips that creep down the board.
+  // Stains and popups are each drawn once into a picture and then only
+  // copied to the screen, so a board full of juice costs almost nothing.
+  static final _stainCache = <Stain, (ui.Image, double)>{};
+  static final _popupCache = <Popup, (ui.Image, double)>{};
+
+  /// Drops cached pictures for things that are gone.
+  static void _forget<T>(Map<T, (ui.Image, double)> cache, List<T> live) {
+    final alive = live.toSet();
+    cache.removeWhere((key, v) {
+      if (alive.contains(key)) return false;
+      v.$1.dispose();
+      return true;
+    });
+  }
+
+  void _blitStain(Canvas canvas, Stain st) {
+    final k = st.strength;
+    if (k <= 0) return;
+    final (img, half) = _stainCache[st] ??= () {
+      final half = st.size * 2.4;
+      final ratio = pixelRatio.clamp(1.0, 2.5);
+      final rec = ui.PictureRecorder();
+      final c = Canvas(rec)..scale(ratio);
+      _stain(c, st, Offset(half, half));
+      final side = (half * 2 * ratio).ceil();
+      return (rec.endRecording().toImageSync(side, side), half);
+    }();
+    // Splats in fast, then sits.
+    final pop = Curves.easeOutBack.transform((st.age / .18).clamp(0.0, 1.0));
+    final h = half * (.6 + .4 * pop);
+    canvas.drawImageRect(
+      img,
+      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+      Rect.fromCenter(center: st.pos, width: h * 2, height: h * 2),
+      Paint()
+        ..color = Color.fromRGBO(255, 255, 255, k)
+        ..filterQuality = FilterQuality.low,
+    );
+  }
+
+  static void _stain(Canvas canvas, Stain st, Offset at) {
+    const k = 1.0;
+    final rnd = math.Random(st.seed);
+    final r = st.size;
+    final base = st.colour;
+    final rim = Color.lerp(base, Colors.black, .35)!;
+    // Irregular main blob.
+    // A smooth wobbly outline through points at random distances.
+    const points = 14;
+    final pts = [
+      for (var i = 0; i < points; i++)
+        at +
+            Offset(
+                  math.cos(i / points * math.pi * 2),
+                  math.sin(i / points * math.pi * 2),
+                ) *
+                (r * (.42 + rnd.nextDouble() * .2)),
+    ];
+    final blob = Path();
+    for (var i = 0; i <= points; i++) {
+      final p = pts[i % points], q = pts[(i + 1) % points];
+      final mid = Offset.lerp(p, q, .5)!;
+      if (i == 0) {
+        blob.moveTo(mid.dx, mid.dy);
+      } else {
+        blob.quadraticBezierTo(p.dx, p.dy, mid.dx, mid.dy);
+      }
+    }
+    blob.close();
+    canvas.drawPath(
+      blob,
+      Paint()
+        ..color = rim.withValues(alpha: .55 * k)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * .08
+        ..strokeJoin = StrokeJoin.round,
+    );
+    canvas.drawPath(blob, Paint()..color = base.withValues(alpha: .62 * k));
+    // Spray thrown along the blade's path, both ways.
+    final spray = Paint()..color = base.withValues(alpha: .6 * k);
+    for (var i = 0; i < 9; i++) {
+      final dir =
+          st.angle +
+          (rnd.nextBool() ? 0 : math.pi) +
+          (rnd.nextDouble() - .5) * .9;
+      final dist = r * (.55 + rnd.nextDouble() * 1.1);
+      final c = at + Offset(math.cos(dir), math.sin(dir)) * dist;
+      final len = r * (.12 + rnd.nextDouble() * .2);
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.rotate(dir);
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: len * 2, height: len * .7),
+        spray,
+      );
+      canvas.restore();
+    }
+    // Loose droplets all round.
+    for (var i = 0; i < 12; i++) {
+      final a = rnd.nextDouble() * math.pi * 2;
+      final d = r * (.5 + rnd.nextDouble() * 1.3);
+      canvas.drawCircle(
+        at + Offset(math.cos(a), math.sin(a)) * d,
+        r * (.03 + rnd.nextDouble() * .07),
+        spray,
+      );
+    }
+    // Drips running down the board, growing for a few seconds.
+    const grow = 1.0;
+    final drip = Paint()
+      ..color = base.withValues(alpha: .55 * k)
+      ..strokeCap = StrokeCap.round;
+    for (var i = 0; i < 3; i++) {
+      final x = at.dx + (rnd.nextDouble() - .5) * r * .8;
+      final top = at.dy + r * .3;
+      final len = r * (.4 + rnd.nextDouble() * 1.2) * grow;
+      final w = r * (.06 + rnd.nextDouble() * .05);
+      drip.strokeWidth = w;
+      canvas.drawLine(Offset(x, top), Offset(x, top + len), drip);
+      canvas.drawCircle(Offset(x, top + len), w * .9, drip);
+    }
+    // A wet shine.
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: at + Offset(-r * .15, -r * .18),
+        width: r * .3,
+        height: r * .14,
+      ),
+      Paint()..color = Colors.white.withValues(alpha: .28 * k),
+    );
+  }
+
   /// Smooths the trail with a Catmull-Rom curve through its points.
   List<(Offset, double)> _smooth() {
     if (trail.length < 3) return trail;
@@ -916,6 +1043,7 @@ class _FruitPainter extends CustomPainter {
     if (pts.length >= 2) {
       // A tapered ribbon: a point at the tail, widest at the blade.
       final left = <Offset>[], right = <Offset>[];
+      final outerL = <Offset>[], outerR = <Offset>[];
       for (var i = 0; i < pts.length; i++) {
         final a = pts[math.max(0, i - 1)].$1,
             b = pts[math.min(pts.length - 1, i + 1)].$1;
@@ -926,13 +1054,13 @@ class _FruitPainter extends CustomPainter {
         final w = 9 * math.sqrt(i / (pts.length - 1)) * fresh;
         left.add(pts[i].$1 + n * w);
         right.add(pts[i].$1 - n * w);
+        outerL.add(pts[i].$1 + n * (w * 2.2));
+        outerR.add(pts[i].$1 - n * (w * 2.2));
       }
       final ribbon = Path()..addPolygon([...left, ...right.reversed], true);
       canvas.drawPath(
-        ribbon,
-        Paint()
-          ..color = blade.glow.withValues(alpha: .75)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+        Path()..addPolygon([...outerL, ...outerR.reversed], true),
+        Paint()..color = blade.glow.withValues(alpha: .3),
       );
       canvas.drawPath(ribbon, Paint()..color = blade.glow);
       final core = Path()
@@ -986,12 +1114,7 @@ class _FruitPainter extends CustomPainter {
     // Shadow on the board.
     canvas.save();
     canvas.translate(6, 10);
-    canvas.drawPath(
-      _bladeShape(),
-      Paint()
-        ..color = const Color(0x55000000)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-    );
+    canvas.drawPath(_bladeShape(), Paint()..color = const Color(0x40000000));
     canvas.restore();
     // Steel blade: bright at the edge, darker at the spine.
     final bladeRect = const Rect.fromLTRB(-78, -15, 8, 7);
@@ -1107,9 +1230,7 @@ class _FruitPainter extends CustomPainter {
       );
       canvas.drawOval(
         r.inflate(6),
-        Paint()
-          ..color = blade.glow.withValues(alpha: .5 * (1 - k))
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+        Paint()..color = blade.glow.withValues(alpha: .4 * (1 - k)),
       );
       canvas.drawOval(
         r,
@@ -1229,43 +1350,50 @@ class _FruitPainter extends CustomPainter {
 
   void _popup(Canvas canvas, Popup p, double width) {
     final k = p.age / Popup.life;
-    final tp = TextPainter(
-      text: TextSpan(
-        text: p.text,
-        style: TextStyle(
-          fontFamily: AppText.family,
-          fontWeight: FontWeight.w700,
-          fontSize: p.text == 'BOOM!' ? 44 : (p.big ? 26 : 18),
-          color:
-              (p.text.startsWith('POISON')
-                      ? const Color(0xFF8CFF4A)
-                      : p.text == 'BOOM!'
-                      ? const Color(0xFFFF7A1A)
-                      : p.text == '✕' || p.text == '-10'
-                      ? const Color(0xFFFF4D4D)
-                      : const Color(0xFFFFE28A))
-                  .withValues(alpha: 1 - k),
-          shadows: [
-            Shadow(
-              color: Colors.black.withValues(alpha: .7 * (1 - k)),
-              blurRadius: 4,
-            ),
-          ],
+    final (img, w) = _popupCache[p] ??= () {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: p.text,
+          style: TextStyle(
+            fontFamily: AppText.family,
+            fontWeight: FontWeight.w700,
+            fontSize: p.text == 'BOOM!' ? 44 : (p.big ? 26 : 18),
+            color: p.text.startsWith('POISON')
+                ? const Color(0xFF8CFF4A)
+                : p.text == 'BOOM!'
+                ? const Color(0xFFFF7A1A)
+                : p.text == '✕' || p.text == '-10'
+                ? const Color(0xFFFF4D4D)
+                : const Color(0xFFFFE28A),
+            shadows: const [Shadow(color: Color(0xB3000000), blurRadius: 4)],
+          ),
         ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final ratio = pixelRatio.clamp(1.0, 2.5);
+      final rec = ui.PictureRecorder();
+      final c = Canvas(rec)..scale(ratio);
+      tp.paint(c, const Offset(4, 4));
+      final img = rec.endRecording().toImageSync(
+        ((tp.width + 8) * ratio).ceil(),
+        ((tp.height + 8) * ratio).ceil(),
+      );
+      return (img, tp.width + 8);
+    }();
+    final h = w * img.height / img.width;
     // Keep long messages on the screen.
-    final x = p.pos.dx.clamp(
-      tp.width / 2 + 8,
-      math.max(tp.width / 2 + 8, width - tp.width / 2 - 8),
+    final double x = p.pos.dx.clamp(
+      w / 2 + 4,
+      math.max(w / 2 + 4, width - w / 2 - 4),
     );
-    tp.paint(
-      canvas,
-      Offset(
-        x - tp.width / 2,
-        p.pos.dy - tp.height / 2 - 40 * k - (p.big ? 30 : 0),
-      ),
+    final y = p.pos.dy - 40 * k - (p.big ? 30 : 0);
+    canvas.drawImageRect(
+      img,
+      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+      Rect.fromCenter(center: Offset(x, y), width: w, height: h),
+      Paint()
+        ..color = Color.fromRGBO(255, 255, 255, (1 - k).clamp(0.0, 1.0))
+        ..filterQuality = FilterQuality.low,
     );
   }
 
