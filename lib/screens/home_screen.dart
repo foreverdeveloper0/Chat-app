@@ -111,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: LayoutBuilder(
                 builder: (context, box) {
                   final scale = box.maxWidth / _designWidth;
-                  const navHeight = 86.0 + 16;
+                  const navHeight = 98.0 + 16;
                   final bodyHeight = box.maxHeight / scale - navHeight;
                   return Column(
                     children: [

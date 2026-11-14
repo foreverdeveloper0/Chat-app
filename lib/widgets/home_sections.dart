@@ -635,9 +635,9 @@ class BottomNav extends StatelessWidget {
   final int index;
   final ValueChanged<int> onChanged;
 
-  /// The middle one, Games, is the home page and stands proud of the bar.
+  /// The middle one, Games, is the home page: a gold orb above the bar.
   static const items = [
-    (Icons.bolt_rounded, 'Quick Match'),
+    (Icons.flash_on_rounded, 'Quick Match'),
     (Icons.account_balance_wallet_rounded, 'Wallet'),
     (Icons.sports_esports_rounded, 'Games'),
     (Icons.history_rounded, 'History'),
@@ -647,7 +647,7 @@ class BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const bar = 66.0, lift = 20.0;
+    const bar = 62.0, orb = 64.0, lift = 36.0;
     Widget side(int i) {
       final on = i == index;
       return Expanded(
@@ -657,29 +657,35 @@ class BottomNav extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AnimatedScale(
-                scale: on ? 1.12 : 1,
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutBack,
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 38,
+                height: 30,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(15),
+                  gradient: on
+                      ? const LinearGradient(
+                          colors: [Color(0x55EBCB7A), Color(0x11EBCB7A)],
+                        )
+                      : null,
+                ),
                 child: Icon(
                   items[i].$1,
-                  size: 30,
-                  color: on ? AppColors.goldSoft : const Color(0xFFFFC93A),
+                  size: 24,
+                  color: on ? AppColors.goldSoft : const Color(0xFFA9B3E8),
                 ),
               ),
-              const SizedBox(height: 2),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    items[i].$2,
-                    maxLines: 1,
-                    softWrap: false,
-                    style: AppText.title.copyWith(
-                      fontSize: 12.5,
-                      color: on ? AppColors.goldSoft : AppColors.cream,
-                    ),
+              const SizedBox(height: 1),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  items[i].$2,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: AppText.title.copyWith(
+                    fontSize: 11,
+                    letterSpacing: .2,
+                    color: on ? AppColors.goldSoft : const Color(0xFFA9B3E8),
                   ),
                 ),
               ),
@@ -689,91 +695,107 @@ class BottomNav extends StatelessWidget {
       );
     }
 
-    Widget divider() => Container(
-      width: 1,
-      height: 38,
-      color: AppColors.cardBorder.withValues(alpha: .7),
-    );
     final on = index == home;
     return SizedBox(
       height: bar + lift,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
+          // The dock: dark glass with a gold hairline along its top edge.
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             height: bar,
             child: Container(
-              decoration: hubCard(radius: 30, border: AppColors.goldTrim),
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 2),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(32),
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF241A6A), Color(0xFF0E0A38)],
+                ),
+                border: Border.all(color: const Color(0x66EBCB7A), width: 1),
+                boxShadow: const [
+                  BoxShadow(color: Color(0xAA000000), blurRadius: 16),
+                  BoxShadow(color: Color(0x337B3FE4), blurRadius: 22),
+                ],
+              ),
               child: Row(
                 children: [
                   side(0),
-                  divider(),
                   side(1),
-                  const SizedBox(width: 92),
+                  const SizedBox(width: 78),
                   side(3),
-                  divider(),
                   side(4),
                 ],
               ),
             ),
           ),
-          // Games: raised, gold-ringed.
+          // The orb, cut out of the dock by a ring of the page colour.
           Positioned(
             left: 0,
             right: 0,
             top: 0,
-            bottom: 0,
             child: Align(
-              alignment: Alignment.bottomCenter,
+              alignment: Alignment.topCenter,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => onChanged(home),
                 child: Container(
-                  width: 92,
-                  height: bar + lift - 2,
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(28),
-                    gradient: _gold,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.goldTrim.withValues(
-                          alpha: on ? .55 : .25,
-                        ),
-                        blurRadius: 16,
-                      ),
-                    ],
+                  width: orb + 10,
+                  height: orb + 10,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.bgBottom,
                   ),
+                  alignment: Alignment.center,
                   child: Container(
+                    width: orb,
+                    height: orb,
+                    padding: const EdgeInsets.all(2.5),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(26),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0xFF5A2BC0), Color(0xFF2A1070)],
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          items[home].$1,
-                          size: 38,
-                          color: AppColors.goldSoft,
-                        ),
-                        Text(
-                          items[home].$2,
-                          style: AppText.title.copyWith(
-                            fontSize: 14,
-                            color: AppColors.goldSoft,
-                          ),
+                      shape: BoxShape.circle,
+                      gradient: _gold,
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFFC93A)
+                              .withValues(alpha: on ? .6 : .25),
+                          blurRadius: 18,
+                          spreadRadius: on ? 2 : 0,
                         ),
                       ],
                     ),
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          center: Alignment(0, -.4),
+                          colors: [Color(0xFF7B3FE4), Color(0xFF2A1070)],
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.sports_esports_rounded,
+                        size: 36,
+                        color: Color(0xFFFFE9A8),
+                      ),
+                    ),
                   ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 5,
+            child: Center(
+              child: Text(
+                items[home].$2,
+                style: AppText.title.copyWith(
+                  fontSize: 12.5,
+                  color: on ? AppColors.goldSoft : const Color(0xFFA9B3E8),
                 ),
               ),
             ),

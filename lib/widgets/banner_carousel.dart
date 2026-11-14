@@ -17,7 +17,7 @@ const bannerAspect = 1672 / 941;
 
 /// What the home page shows of it: a short strip, the artwork trimmed a
 /// little top and bottom (the live panel keeps its place on the full size).
-const bannerShown = 2.1;
+const bannerShown = 2.7;
 
 /// Where the empty slanted panel sits inside every banner, measured on the
 /// artwork as fractions of its size. The panel is a parallelogram whose
@@ -263,7 +263,7 @@ class _BannerCarouselState extends State<BannerCarousel> {
                             child: OverflowBox(
                               minHeight: h,
                               maxHeight: h,
-                              alignment: const Alignment(0, .05),
+                              alignment: const Alignment(0, -.5),
                               child: SizedBox(
                                 width: box.maxWidth,
                                 height: h,
